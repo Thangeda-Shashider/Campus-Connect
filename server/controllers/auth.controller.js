@@ -3,11 +3,12 @@ import { validationResult } from 'express-validator';
 import User from '../models/User.js';
 
 // Cookie config
+const isProd = process.env.NODE_ENV === 'production';
 const COOKIE_OPTIONS = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    secure: isProd,                    // HTTPS only in production
+    sameSite: isProd ? 'none' : 'lax', // 'none' required for cross-origin (Vercel → Render)
+    maxAge: 7 * 24 * 60 * 60 * 1000,  // 7 days
 };
 
 /**
@@ -99,7 +100,11 @@ export const login = async (req, res) => {
 
 // POST /api/auth/logout
 export const logout = (_req, res) => {
-    res.clearCookie('token', { httpOnly: true, sameSite: 'lax' });
+    res.clearCookie('token', {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'lax',
+    });
     return res
         .status(200)
         .json({ success: true, data: { message: 'Logged out successfully' } });
