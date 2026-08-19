@@ -12,9 +12,9 @@ import {
     Building2,
     Calendar,
 } from 'lucide-react';
-import api from '../../../api/axios.js';
-import { formatDate } from '../../../utils/formatDate.js';
-import { cn } from '../../../lib/utils.js';
+import api from '../../api/axios.js';
+import { formatDate } from '../../utils/formatDate.js';
+import { cn } from '../../lib/utils.js';
 
 const ManageAchievements = () => {
     const [achievements, setAchievements] = useState([]);

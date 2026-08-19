@@ -15,10 +15,9 @@ import {
     Building2,
     X,
 } from 'lucide-react';
-import api from '../../../api/axios.js';
-import { formatDate } from '../../../utils/formatDate.js';
-import { cn } from '../../../lib/utils.js';
-import { ACHIEVEMENT_TYPES_LIST } from '../../../../server/models/Achievement.js'; // We will hardcode types for client
+import api from '../../api/axios.js';
+import { formatDate } from '../../utils/formatDate.js';
+import { cn } from '../../lib/utils.js';
 
 // We'll hardcode the types for the client to avoid importing from server
 const ACHIEVEMENT_TYPES = ['certification', 'workshop', 'seminar', 'webinar', 'other'];
