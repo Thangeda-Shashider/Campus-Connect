@@ -10,6 +10,7 @@ import authRoutes from './routes/auth.routes.js';
 import eventRoutes from './routes/event.routes.js';
 import registrationRoutes from './routes/registration.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import achievementRoutes from './routes/achievement.routes.js';
 
 // Start cron jobs
 import './jobs/weeklyDigest.js';
@@ -39,6 +40,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/registrations', registrationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/achievements', achievementRoutes);
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
