@@ -66,3 +66,6 @@ coverage/
 *.local
 *.orig
 *.bak
+
+# ─── AI Context (local only — not for version control) ────────────────────────
+.ai/
