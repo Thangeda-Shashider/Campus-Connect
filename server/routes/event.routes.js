@@ -7,6 +7,7 @@ import {
     updateEvent,
     deleteEvent,
     getMyEvents,
+    getMyStats,
 } from '../controllers/event.controller.js';
 import protect from '../middleware/auth.middleware.js';
 import requireRole from '../middleware/role.middleware.js';
@@ -28,8 +29,9 @@ const eventValidation = [
         .withMessage('Valid registration deadline is required'),
 ];
 
-// IMPORTANT: /my/events must be before /:id to avoid route conflict
+// IMPORTANT: /my/* must be before /:id to avoid route conflict
 router.get('/my/events', protect, requireRole('organizer', 'admin'), getMyEvents);
+router.get('/my/stats', protect, requireRole('organizer', 'admin'), getMyStats);
 
 router.get('/', getEvents);
 router.get('/:id', getEventById);

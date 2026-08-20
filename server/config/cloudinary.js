@@ -1,9 +1,18 @@
 import multer from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
+import dotenv from 'dotenv';
+dotenv.config();
+
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 /**
- * Cloudinary upload is STUBBED until credentials are configured.
- * Files are stored in memory and the original name is returned as bannerUrl.
- * Replace this with cloudinary-multer-storage once credentials are ready.
+ * Files are stored in memory using Multer.
+ * They are uploaded to Cloudinary on-the-fly inside controllers.
  */
 
 // In-memory storage stub
@@ -22,13 +31,33 @@ export const upload = multer({
 });
 
 /**
- * Stub uploader — returns a placeholder URL.
- * Replace the body of this function with a real Cloudinary upload call.
- * @param {Buffer} _buffer - File buffer
- * @param {string} _originalname - Original filename
+ * Uploads a buffer to Cloudinary.
+ * If Cloudinary credentials are not set in .env, falls back to a placeholder.
+ * 
+ * @param {Buffer} buffer - File buffer from multer
+ * @param {string} originalname - Original filename
  * @returns {Promise<string>} Uploaded image URL
  */
-export const uploadToCloud = async (_buffer, _originalname) => {
-    // TODO: wire real Cloudinary upload here
-    return 'https://placehold.co/1200x400?text=Event+Banner';
+export const uploadToCloud = async (buffer, originalname) => {
+    // Fallback if Cloudinary is not configured in .env
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY) {
+        console.warn('⚠️ Cloudinary credentials missing in .env. Falling back to placeholder.');
+        return 'https://placehold.co/1200x400?text=Event+Banner';
+    }
+
+    return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+            {
+                folder: 'campusconnect',
+                public_id: `${Date.now()}-${originalname.split('.')[0]}`,
+            },
+            (error, result) => {
+                if (error) return reject(error);
+                resolve(result.secure_url);
+            }
+        );
+        
+        // Write the buffer to the upload stream
+        uploadStream.end(buffer);
+    });
 };

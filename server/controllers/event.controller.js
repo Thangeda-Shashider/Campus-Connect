@@ -218,3 +218,88 @@ export const deleteEvent = async (req, res) => {
         return res.status(500).json({ success: false, error: err.message });
     }
 };
+
+// GET /api/events/my/stats
+export const getMyStats = async (req, res) => {
+    try {
+        // 1. Get all events for the organizer
+        const events = await Event.find({ organizer: req.user.userId }).select('_id');
+        const eventIds = events.map(e => e._id);
+
+        if (eventIds.length === 0) {
+            return res.status(200).json({
+                success: true,
+                data: { perDay: [], perDept: [], attendance: [] }
+            });
+        }
+
+        // 2. Get all registrations for these events, populate user to get department
+        const registrations = await Registration.find({ event: { $in: eventIds } })
+            .populate('user', 'department')
+            .lean();
+
+        // 3. Compute Attendance
+        let attendedCount = 0;
+        let absentCount = 0;
+        
+        // Compute Departments
+        const deptMap = {};
+
+        // Compute registrations per day (last 7 days)
+        const dayMap = {};
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        
+        // Initialize last 7 days to 0
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            dayMap[days[d.getDay()]] = 0;
+        }
+
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        registrations.forEach(reg => {
+            // Attendance
+            if (reg.attended) attendedCount++;
+            else absentCount++;
+
+            // Department
+            const dept = reg.user?.department || 'Unknown';
+            deptMap[dept] = (deptMap[dept] || 0) + 1;
+
+            // Registration Date (only if within last 7 days)
+            const regDate = new Date(reg.registeredAt || reg.createdAt);
+            if (regDate > sevenDaysAgo) {
+                const dayName = days[regDate.getDay()];
+                if (dayMap[dayName] !== undefined) {
+                    dayMap[dayName]++;
+                }
+            }
+        });
+
+        const attendance = [
+            { name: 'Attended', value: attendedCount },
+            { name: 'Absent', value: absentCount }
+        ];
+
+        const perDept = Object.keys(deptMap).map(dept => ({
+            dept,
+            count: deptMap[dept]
+        })).sort((a, b) => b.count - a.count);
+
+        // Format perDay as an array matching the order of initialization
+        const perDay = Object.keys(dayMap).map(day => ({
+            day,
+            registrations: dayMap[day]
+        }));
+
+        return res.status(200).json({
+            success: true,
+            data: { perDay, perDept, attendance }
+        });
+
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+};
