@@ -46,6 +46,7 @@ const Navbar = () => {
         student: [
             { to: '/events', label: 'Events' },
             { to: '/dashboard', label: 'My Dashboard' },
+            { to: '/achievements', label: 'Achievements' },
         ],
         organizer: [
             { to: '/events', label: 'Events' },
@@ -55,6 +56,7 @@ const Navbar = () => {
         admin: [
             { to: '/admin', label: 'Dashboard' },
             { to: '/admin/users', label: 'Users' },
+            { to: '/admin/achievements', label: 'Achievements' },
         ],
     };
 

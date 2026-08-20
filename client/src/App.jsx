@@ -14,6 +14,7 @@ import Register from './pages/auth/Register.jsx';
 import EventList from './pages/student/EventList.jsx';
 import EventDetail from './pages/student/EventDetail.jsx';
 import Dashboard from './pages/student/Dashboard.jsx';
+import Achievements from './pages/student/Achievements.jsx';
 
 // Organizer pages
 import ManageEvents from './pages/organizer/ManageEvents.jsx';
@@ -25,6 +26,7 @@ import OrganizerRegistrants from './pages/organizer/OrganizerRegistrants.jsx';
 // Admin pages
 import AdminDashboard from './pages/admin/AdminDashboard.jsx';
 import ManageUsers from './pages/admin/ManageUsers.jsx';
+import ManageAchievements from './pages/admin/ManageAchievements.jsx';
 
 const AppRoutes = () => {
   const { hydrate } = useAuth();
@@ -50,6 +52,14 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={['student']}>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/achievements"
+          element={
+            <ProtectedRoute allowedRoles={['student']}>
+              <Achievements />
             </ProtectedRoute>
           }
         />
@@ -110,6 +120,14 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={['admin']}>
               <ManageUsers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/achievements"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <ManageAchievements />
             </ProtectedRoute>
           }
         />

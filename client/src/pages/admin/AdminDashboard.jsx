@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, CalendarDays, ClipboardList, TrendingUp, Plus, ShieldCheck } from 'lucide-react';
+import { Users, CalendarDays, ClipboardList, TrendingUp, Plus, ShieldCheck, Award } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios.js';
 
@@ -79,7 +79,7 @@ const AdminDashboard = () => {
             )}
 
             {/* Quick actions */}
-            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <QuickCard
                     title="Manage Users"
                     description="Edit profiles, change roles, deactivate accounts"
@@ -100,6 +100,13 @@ const AdminDashboard = () => {
                     onClick={() => navigate('/organizer/create')}
                     accent="bg-green-500/20"
                     icon={<Plus className="w-5 h-5 text-green-400" />}
+                />
+                <QuickCard
+                    title="Achievements"
+                    description="Review and download student certificates & workshops"
+                    onClick={() => navigate('/admin/achievements')}
+                    accent="bg-orange-500/20"
+                    icon={<Award className="w-5 h-5 text-orange-400" />}
                 />
             </div>
         </div>
