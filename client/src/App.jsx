@@ -26,6 +26,7 @@ import OrganizerRegistrants from './pages/organizer/OrganizerRegistrants.jsx';
 // Admin pages
 import AdminDashboard from './pages/admin/AdminDashboard.jsx';
 import ManageUsers from './pages/admin/ManageUsers.jsx';
+import ManageAdminEvents from './pages/admin/ManageAdminEvents.jsx';
 import ManageAchievements from './pages/admin/ManageAchievements.jsx';
 
 const AppRoutes = () => {
@@ -135,7 +136,7 @@ const AppRoutes = () => {
           path="/admin/events"
           element={
             <ProtectedRoute allowedRoles={['admin']}>
-              <ManageUsers />
+              <ManageAdminEvents />
             </ProtectedRoute>
           }
         />

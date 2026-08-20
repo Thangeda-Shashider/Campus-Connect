@@ -28,8 +28,12 @@ const ManageEvents = () => {
     const load = async () => {
         setLoading(true);
         try {
-            const res = await api.get('/events/my/events');
-            setEvents(res.data.data);
+            const [eventsRes, statsRes] = await Promise.all([
+                api.get('/events/my/events'),
+                api.get('/events/my/stats'),
+            ]);
+            setEvents(eventsRes.data.data);
+            setStats(statsRes.data.data);
         } catch {
             toast.error('Failed to load events');
         } finally {
@@ -149,7 +153,7 @@ const ManageEvents = () => {
                         <div className="lg:col-span-2 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
                             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">Registrations (last 7 days)</h3>
                             <ResponsiveContainer width="100%" height={200}>
-                                <LineChart data={demoLineData}>
+                                <LineChart data={stats.perDay.length ? stats.perDay : [{ day: 'N/A', registrations: 0 }]}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                                     <XAxis dataKey="day" tick={{ fontSize: 12 }} />
                                     <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
@@ -165,7 +169,7 @@ const ManageEvents = () => {
                             <ResponsiveContainer width="100%" height={200}>
                                 <PieChart>
                                     <Pie
-                                        data={[{ name: 'Attended', value: 62 }, { name: 'Absent', value: 38 }]}
+                                        data={stats.attendance.length ? stats.attendance : [{ name: 'No Data', value: 1 }]}
                                         cx="50%"
                                         cy="50%"
                                         innerRadius={55}
@@ -186,7 +190,7 @@ const ManageEvents = () => {
                         <div className="lg:col-span-3 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
                             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">Registrations by Department</h3>
                             <ResponsiveContainer width="100%" height={180}>
-                                <BarChart data={demoDeptData}>
+                                <BarChart data={stats.perDept.length ? stats.perDept : [{ dept: 'N/A', count: 0 }]}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                                     <XAxis dataKey="dept" tick={{ fontSize: 12 }} />
                                     <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
@@ -201,17 +205,5 @@ const ManageEvents = () => {
         </div>
     );
 };
-
-// Demo data (will be replaced with live API calls once backend aggregation endpoints are added)
-const demoLineData = [
-    { day: 'Mon', registrations: 3 }, { day: 'Tue', registrations: 7 },
-    { day: 'Wed', registrations: 5 }, { day: 'Thu', registrations: 12 },
-    { day: 'Fri', registrations: 9 }, { day: 'Sat', registrations: 15 },
-    { day: 'Sun', registrations: 6 },
-];
-const demoDeptData = [
-    { dept: 'CSE', count: 28 }, { dept: 'ECE', count: 14 },
-    { dept: 'Mech', count: 9 }, { dept: 'Civil', count: 5 }, { dept: 'MBA', count: 11 },
-];
 
 export default ManageEvents;
