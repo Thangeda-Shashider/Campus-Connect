@@ -71,7 +71,6 @@ const Login = () => {
                                 type="email"
                                 {...register('email')}
                                 className={inp(errors.email)}
-                                placeholder="you@university.edu"
                                 autoComplete="email"
                             />
                             {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email.message}</p>}
@@ -83,7 +82,6 @@ const Login = () => {
                                 type="password"
                                 {...register('password')}
                                 className={inp(errors.password)}
-                                placeholder="••••••••"
                                 autoComplete="current-password"
                             />
                             {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password.message}</p>}

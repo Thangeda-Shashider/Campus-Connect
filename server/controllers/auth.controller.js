@@ -31,7 +31,7 @@ export const register = async (req, res) => {
                 .json({ success: false, error: errors.array()[0].msg });
         }
 
-        const { name, email, password, role, department, year, interests } =
+        const { name, rollNo, email, password, role, department, year, interests } =
             req.body;
 
         const existingUser = await User.findOne({ email });
@@ -43,6 +43,7 @@ export const register = async (req, res) => {
 
         const user = await User.create({
             name,
+            rollNo,
             email,
             password,
             role,
