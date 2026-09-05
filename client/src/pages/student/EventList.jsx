@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search, SlidersHorizontal } from 'lucide-react';
-import api from '../../api/axios.js';
+import { getEvents } from '../../lib/api/events.js';
 import EventCard from '../../components/EventCard.jsx';
 import { cn } from '../../lib/utils.js';
 
@@ -18,12 +18,12 @@ const EventList = () => {
     const fetchEvents = async () => {
         setLoading(true);
         try {
-            const params = { page, limit: LIMIT };
-            if (search) params.search = search;
-            if (category !== 'All') params.category = category;
-            const res = await api.get('/events', { params });
-            setEvents(res.data.data);
-            setTotal(res.data.pagination?.total ?? 0);
+            const data = await getEvents({
+                category: category !== 'All' ? category : undefined,
+                search: search.trim() || undefined,
+            });
+            setEvents(data || []);
+            setTotal(data?.length ?? 0);
         } catch {
             setEvents([]);
         } finally {
@@ -98,7 +98,7 @@ const EventList = () => {
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{total} event{total !== 1 ? 's' : ''} found</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                         {events.map((event) => (
-                            <EventCard key={event._id} event={event} />
+                            <EventCard key={event.id || event._id} event={event} />
                         ))}
                     </div>
 

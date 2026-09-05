@@ -6,7 +6,12 @@ import {
     XCircle, Clock,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../../api/axios.js';
+import { getEventById, getEventRegistrationCount } from '../../lib/api/events.js';
+import {
+    registerForEvent,
+    getMyRegistration,
+    uploadPaymentScreenshot,
+} from '../../lib/api/registrations.js';
 import useAuth from '../../hooks/useAuth.js';
 import QRDisplay from '../../components/QRDisplay.jsx';
 import { formatDateTime, formatRelative } from '../../utils/formatDate.js';
@@ -46,7 +51,7 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
     const [registrationId, setRegistrationId] = useState(null);
 
     const [form, setForm] = useState({
-        rollNumber: '',
+        rollNumber: user?.roll_no ?? '',
         collegeEmail: user?.email ?? '',
         phone: '',
     });
@@ -60,6 +65,12 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
     const [uploading, setUploading] = useState(false);
     const [dragging, setDragging] = useState(false);
 
+    const formFields = event.registration_form_fields ?? event.registrationFormFields ?? [];
+    const isPaymentRequired = event.payment_required ?? event.paymentRequired;
+    const paymentAmount = event.payment_amount ?? event.paymentAmount;
+    const paymentQrUrl = event.payment_qr_url || event.paymentQrUrl;
+    const hasCertificate = event.has_certificate ?? event.hasCertificate;
+
     const validate = () => {
         const e = {};
         if (!form.rollNumber.trim()) e.rollNumber = 'Roll number is required';
@@ -68,7 +79,7 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
         if (!form.phone.trim()) e.phone = 'Phone number is required';
         else if (!/^\d{10}$/.test(form.phone.replace(/\s/g, ''))) e.phone = 'Enter a valid 10-digit phone number';
 
-        (event.registrationFormFields ?? []).forEach((field) => {
+        formFields.forEach((field) => {
             if (field.required && !customForm[field.label]?.trim()) {
                 e[`custom_${field.label}`] = `"${field.label}" is required`;
             }
@@ -94,19 +105,18 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
                 'Phone Number': form.phone,
                 ...customForm,
             };
-            const res = await api.post(`/registrations/${event._id}`, { formResponses });
-            if (res.data.success) {
-                const reg = res.data.data.registration;
-                setRegistrationId(reg._id);
-                if (event.paymentRequired) {
-                    setStep(2); // Move to payment step
-                } else {
-                    toast.success('Registered! Your QR code has been emailed to you 🎉');
-                    onSuccess(res.data.data);
-                }
+            const eventId = event.id || event._id;
+            const reg = await registerForEvent({ eventId, formResponses });
+            const regId = reg.id || reg._id;
+            setRegistrationId(regId);
+            if (isPaymentRequired) {
+                setStep(2); // Move to payment step
+            } else {
+                toast.success('Registered successfully! 🎉');
+                onSuccess({ registration: reg, qrToken: reg.qr_token || reg.qrToken });
             }
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Registration failed');
+            toast.error(err.message || 'Registration failed');
         } finally {
             setSubmitting(false);
         }
@@ -131,17 +141,11 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
         if (!screenshotFile) { toast.error('Please select a payment screenshot'); return; }
         setUploading(true);
         try {
-            const fd = new FormData();
-            fd.append('screenshot', screenshotFile);
-            const res = await api.post(`/registrations/${registrationId}/payment-screenshot`, fd, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
-            if (res.data.success) {
-                toast.success('Payment screenshot uploaded! Awaiting organizer verification 🎉');
-                onSuccess({ registration: { _id: registrationId, paymentStatus: 'pending' }, qrToken: null });
-            }
+            await uploadPaymentScreenshot(registrationId, user.id, screenshotFile);
+            toast.success('Payment screenshot uploaded! Awaiting organizer verification 🎉');
+            onSuccess({ registration: { id: registrationId, payment_status: 'pending' }, qrToken: null });
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Upload failed');
+            toast.error(err.message || 'Upload failed');
         } finally {
             setUploading(false);
         }
@@ -202,12 +206,12 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
                     <>
                         <div className="overflow-y-auto flex-1 p-6 space-y-4">
                             {/* Notices */}
-                            {event.paymentRequired && (
+                            {isPaymentRequired && (
                                 <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                                     <CreditCard className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                                     <div>
                                         <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
-                                            Paid Event — ₹{event.paymentAmount}
+                                            Paid Event — ₹{paymentAmount}
                                         </p>
                                         <p className="text-xs text-amber-600/80 dark:text-amber-400/80 mt-0.5">
                                             After filling this form, you'll be asked to scan the organizer's QR and upload your payment screenshot.
@@ -215,7 +219,7 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
                                     </div>
                                 </div>
                             )}
-                            {event.hasCertificate && (
+                            {hasCertificate && (
                                 <div className="flex items-center gap-3 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800">
                                     <Award className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                                     <p className="text-sm text-indigo-700 dark:text-indigo-300">
@@ -241,12 +245,12 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
                             </FormField>
 
                             {/* Custom fields */}
-                            {(event.registrationFormFields ?? []).length > 0 && (
+                            {formFields.length > 0 && (
                                 <>
                                     <div className="border-t dark:border-gray-800 pt-2">
                                         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Additional Details</p>
                                     </div>
-                                    {event.registrationFormFields.map((field) => (
+                                    {formFields.map((field) => (
                                         <FormField key={field.label} label={field.label} required={field.required} error={errors[`custom_${field.label}`]}>
                                             <input
                                                 type={field.type === 'phone' ? 'tel' : field.type}
@@ -269,7 +273,7 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
                             <button onClick={handleSubmitStep1} disabled={submitting}
                                 className="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-60 transition-colors flex items-center justify-center gap-2">
                                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                                {submitting ? 'Submitting...' : event.paymentRequired ? 'Next: Make Payment →' : 'Confirm Registration'}
+                                {submitting ? 'Submitting...' : isPaymentRequired ? 'Next: Make Payment →' : 'Confirm Registration'}
                             </button>
                         </div>
                     </>
@@ -281,13 +285,13 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
                         <div className="overflow-y-auto flex-1 p-6 space-y-5">
                             <div className="text-center">
                                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                                    Scan the QR below using any UPI app and pay <strong className="text-gray-900 dark:text-white">₹{event.paymentAmount}</strong>.
+                                    Scan the QR below using any UPI app and pay <strong className="text-gray-900 dark:text-white">₹{paymentAmount}</strong>.
                                     Then upload a screenshot of the payment confirmation.
                                 </p>
                             </div>
 
                             {/* Organizer Payment QR */}
-                            {event.paymentQrUrl ? (
+                            {paymentQrUrl ? (
                                 <div className="rounded-2xl border dark:border-gray-800 overflow-hidden bg-white dark:bg-gray-900">
                                     <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2.5 flex items-center gap-2">
                                         <CreditCard className="w-4 h-4 text-indigo-500" />
@@ -296,7 +300,7 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
                                     <div className="p-6 flex flex-col items-center gap-3">
                                         <div className="p-3 bg-white rounded-xl shadow-sm border dark:border-gray-700">
                                             <img
-                                                src={event.paymentQrUrl}
+                                                src={paymentQrUrl}
                                                 alt="Payment QR Code"
                                                 className="w-52 h-52 object-contain"
                                             />
@@ -398,17 +402,15 @@ const EventDetail = () => {
     useEffect(() => {
         const load = async () => {
             try {
-                const [evRes] = await Promise.all([api.get(`/events/${id}`)]);
-                setEvent(evRes.data.data);
-                if (isAuthenticated) {
-                    try {
-                        const regRes = await api.get('/registrations/my');
-                        const found = regRes.data.data.find((r) => r.event?._id === id);
-                        if (found) {
-                            setMyRegistration(found);
-                            setQrToken(found.qrToken);
-                        }
-                    } catch { }
+                const [evData, regCount, myReg] = await Promise.all([
+                    getEventById(id),
+                    getEventRegistrationCount(id).catch(() => 0),
+                    isAuthenticated ? getMyRegistration(id).catch(() => null) : Promise.resolve(null),
+                ]);
+                setEvent({ ...evData, registrationCount: regCount });
+                if (myReg) {
+                    setMyRegistration(myReg);
+                    setQrToken(myReg.qr_token || myReg.qrToken);
                 }
             } catch {
                 toast.error('Failed to load event');
@@ -440,18 +442,31 @@ const EventDetail = () => {
         return <div className="text-center py-24 text-gray-500">Event not found.</div>;
     }
 
-    const seatsRemaining = event.maxSeats != null ? event.maxSeats - (event.registrationCount ?? 0) : null;
+    const maxSeats = event.max_seats ?? event.maxSeats;
+    const regCount = event.registration_count ?? event.registrationCount ?? 0;
+    const seatsRemaining = maxSeats != null ? maxSeats - regCount : null;
     const full = seatsRemaining !== null && seatsRemaining <= 0;
-    const deadline = new Date(event.registrationDeadline) < new Date();
+    const deadlineDate = event.registration_deadline || event.registrationDeadline;
+    const deadline = deadlineDate ? new Date(deadlineDate) < new Date() : false;
     const isOrganizer = user?.role === 'organizer' || user?.role === 'admin';
     const canRegister = !myRegistration && !full && !deadline && !isOrganizer && isAuthenticated;
+
+    const eventId = event.id || event._id;
+    const bannerUrl = event.banner_url || event.bannerUrl || `https://picsum.photos/seed/${eventId}/1200/400`;
+    const hasCert = event.has_certificate ?? event.hasCertificate;
+    const isPaid = event.payment_required ?? event.paymentRequired;
+    const payAmount = event.payment_amount ?? event.paymentAmount;
+    const formFields = event.registration_form_fields ?? event.registrationFormFields ?? [];
+    const organizerName = event.profiles?.name || event.organizer?.name || 'Organizer';
+    const regPaymentStatus = myRegistration?.payment_status || myRegistration?.paymentStatus;
+    const regQrToken = myRegistration?.qr_token || myRegistration?.qrToken;
 
     return (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
             {/* Banner */}
             <div className="rounded-2xl overflow-hidden h-72 bg-gray-100 dark:bg-gray-800 mb-8">
                 <img
-                    src={event.bannerUrl || `https://picsum.photos/seed/${event._id}/1200/400`}
+                    src={bannerUrl}
                     alt={event.title}
                     className="w-full h-full object-cover"
                 />
@@ -470,16 +485,16 @@ const EventDetail = () => {
                     <p className="text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-line">{event.description}</p>
 
                     {/* Highlights */}
-                    {(event.hasCertificate || event.paymentRequired) && (
+                    {(hasCert || isPaid) && (
                         <div className="flex flex-wrap gap-2">
-                            {event.hasCertificate && (
+                            {hasCert && (
                                 <span className="flex items-center gap-1.5 text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-full border border-indigo-200 dark:border-indigo-800">
                                     <Award className="w-3.5 h-3.5" /> Certificate of Participation
                                 </span>
                             )}
-                            {event.paymentRequired && (
+                            {isPaid && (
                                 <span className="flex items-center gap-1.5 text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-3 py-1.5 rounded-full border border-amber-200 dark:border-amber-800">
-                                    <CreditCard className="w-3.5 h-3.5" /> Paid Event — ₹{event.paymentAmount}
+                                    <CreditCard className="w-3.5 h-3.5" /> Paid Event — ₹{payAmount}
                                 </span>
                             )}
                         </div>
@@ -498,7 +513,7 @@ const EventDetail = () => {
                     <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
                         <div className="flex items-center gap-2">
                             <User className="w-4 h-4 shrink-0" />
-                            Organized by <strong>{event.organizer?.name}</strong>
+                            Organized by <strong>{organizerName}</strong>
                         </div>
                     </div>
 
@@ -511,18 +526,18 @@ const EventDetail = () => {
                                     Registration requires
                                 </p>
                             </div>
-                            {['Roll Number', 'College Email', 'Phone Number', ...(event.registrationFormFields?.map(f => f.label) ?? [])].map((label, i, arr) => (
+                            {['Roll Number', 'College Email', 'Phone Number', ...(formFields.map(f => f.label) ?? [])].map((label, i, arr) => (
                                 <div key={label} className={cn('flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-900', i < arr.length - 1 ? 'border-b dark:border-gray-800' : '')}>
                                     <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
                                     <span className={cn('text-xs px-2 py-0.5 rounded-full',
-                                        (i < 3 || event.registrationFormFields?.[i - 3]?.required)
+                                        (i < 3 || formFields[i - 3]?.required)
                                             ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
                                             : 'bg-gray-100 dark:bg-gray-800 text-gray-500')}>
-                                        {(i < 3 || event.registrationFormFields?.[i - 3]?.required) ? 'Required' : 'Optional'}
+                                        {(i < 3 || formFields[i - 3]?.required) ? 'Required' : 'Optional'}
                                     </span>
                                 </div>
                             ))}
-                            {event.paymentRequired && (
+                            {isPaid && (
                                 <div className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-900 border-t dark:border-gray-800">
                                     <span className="text-sm text-gray-700 dark:text-gray-300">Payment Screenshot</span>
                                     <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400">Required (Step 2)</span>
@@ -539,12 +554,12 @@ const EventDetail = () => {
                         <InfoRow icon={<MapPin className="w-4 h-4" />} label="Venue" value={event.venue} />
                         {seatsRemaining !== null && (
                             <InfoRow icon={<Users className="w-4 h-4" />} label="Seats"
-                                value={full ? 'Fully Booked' : `${seatsRemaining} / ${event.maxSeats} remaining`} />
+                                value={full ? 'Fully Booked' : `${seatsRemaining} / ${maxSeats} remaining`} />
                         )}
 
                         <div className="pt-2 border-t dark:border-gray-800">
                             <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                                Registration closes {formatRelative(event.registrationDeadline)}
+                                Registration closes {formatRelative(deadlineDate)}
                             </p>
 
                             {/* Registration status */}
@@ -555,13 +570,13 @@ const EventDetail = () => {
                                     </div>
 
                                     {/* Payment status for paid events */}
-                                    {event.paymentRequired && myRegistration.paymentStatus && myRegistration.paymentStatus !== 'not_required' && (
-                                        <PaymentBadge status={myRegistration.paymentStatus} />
+                                    {isPaid && regPaymentStatus && regPaymentStatus !== 'not_required' && (
+                                        <PaymentBadge status={regPaymentStatus} />
                                     )}
 
-                                    {myRegistration.qrToken && (
+                                    {regQrToken && (
                                         <button
-                                            onClick={() => setQrToken(myRegistration.qrToken)}
+                                            onClick={() => setQrToken(regQrToken)}
                                             className="w-full py-2 rounded-lg border border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400 text-sm font-medium hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
                                         >
                                             Show QR Code

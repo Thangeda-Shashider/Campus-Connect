@@ -59,6 +59,19 @@ export const adminUpdateUser = async (userId, updates) => {
 };
 
 /**
+ * Delete a user profile. Admin only via RLS.
+ * @param {string} userId
+ * @returns {Promise<void>}
+ */
+export const adminDeleteUser = async (userId) => {
+    const { error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', userId);
+    if (error) throw error;
+};
+
+/**
  * Get platform-wide statistics for the Admin Dashboard.
  * Returns totalUsers, totalEvents, registrationsThisMonth, and attendanceRate.
  * @returns {Promise<{ totalUsers: number, totalEvents: number, registrationsThisMonth: number, attendanceRate: number }>}

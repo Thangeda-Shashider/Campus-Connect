@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react';
 import { Trash2, Search, Plus, Pencil, CheckCircle, XCircle, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import api from '../../api/axios.js';
+import {
+    getAllUsers,
+    updateUserRole,
+    adminUpdateUser,
+    adminDeleteUser,
+    adminGetAllEvents,
+    adminUpdateEventStatus,
+} from '../../lib/api/admin.js';
 import { formatDate } from '../../utils/formatDate.js';
 
 const ROLES = ['student', 'organizer', 'admin'];
@@ -35,7 +42,7 @@ const EditUserModal = ({ user, onClose, onSave }) => {
         e.preventDefault();
         setSaving(true);
         try {
-            await onSave(user._id, form);
+            await onSave(user.id || user._id, form);
             onClose();
         } finally {
             setSaving(false);
@@ -137,12 +144,12 @@ const ManageUsers = () => {
         const load = async () => {
             setLoading(true);
             try {
-                const [uRes, eRes] = await Promise.all([
-                    api.get('/admin/users'),
-                    api.get('/admin/events'),
+                const [uData, eData] = await Promise.all([
+                    getAllUsers(),
+                    adminGetAllEvents(),
                 ]);
-                setUsers(uRes.data.data);
-                setEvents(eRes.data.data);
+                setUsers(uData);
+                setEvents(eData);
             } catch {
                 toast.error('Failed to load data');
             } finally {
@@ -155,21 +162,21 @@ const ManageUsers = () => {
     // ── User actions ──────────────────────────────────────────────────────────
     const updateRole = async (id, role) => {
         try {
-            await api.put(`/admin/users/${id}/role`, { role });
-            setUsers((u) => u.map((user) => user._id === id ? { ...user, role } : user));
+            await updateUserRole(id, role);
+            setUsers((u) => u.map((user) => (user.id || user._id) === id ? { ...user, role } : user));
             toast.success('Role updated');
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Failed to update role');
+            toast.error(err.message || 'Failed to update role');
         }
     };
 
     const saveUser = async (id, data) => {
         try {
-            const res = await api.put(`/admin/users/${id}`, data);
-            setUsers((u) => u.map((user) => user._id === id ? { ...user, ...res.data.data } : user));
+            const updated = await adminUpdateUser(id, data);
+            setUsers((u) => u.map((user) => (user.id || user._id) === id ? { ...user, ...updated } : user));
             toast.success('User updated');
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Failed to update user');
+            toast.error(err.message || 'Failed to update user');
             throw err;
         }
     };
@@ -177,8 +184,8 @@ const ManageUsers = () => {
     const deleteUser = async (id) => {
         if (!window.confirm('Permanently delete this user?')) return;
         try {
-            await api.delete(`/admin/users/${id}`);
-            setUsers((u) => u.filter((user) => user._id !== id));
+            await adminDeleteUser(id);
+            setUsers((u) => u.filter((user) => (user.id || user._id) !== id));
             toast.success('User deleted');
         } catch {
             toast.error('Failed to delete user');
@@ -188,8 +195,8 @@ const ManageUsers = () => {
     // ── Event actions ─────────────────────────────────────────────────────────
     const setEventStatus = async (id, status) => {
         try {
-            await api.put(`/admin/events/${id}/status`, { status });
-            setEvents((e) => e.map((ev) => ev._id === id ? { ...ev, status } : ev));
+            await adminUpdateEventStatus(id, status);
+            setEvents((e) => e.map((ev) => (ev.id || ev._id) === id ? { ...ev, status } : ev));
             const msg = status === 'upcoming' ? '✅ Event approved & published' : '❌ Event cancelled';
             toast.success(msg);
         } catch {
@@ -205,7 +212,8 @@ const ManageUsers = () => {
 
     const filteredEvents = events.filter((ev) => {
         const q = eventSearch.toLowerCase();
-        return !q || ev.title?.toLowerCase().includes(q) || ev.organizer?.name?.toLowerCase().includes(q);
+        const orgName = ev.profiles?.name || ev.organizer?.name;
+        return !q || ev.title?.toLowerCase().includes(q) || orgName?.toLowerCase().includes(q);
     });
 
     const ROLE_COLORS = {
@@ -304,8 +312,10 @@ const ManageUsers = () => {
                                                 {userSearch ? `No users matching "${userSearch}"` : 'No users found'}
                                             </td>
                                         </tr>
-                                    ) : filteredUsers.map((u) => (
-                                        <tr key={u._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+                                    ) : filteredUsers.map((u) => {
+                                        const userId = u.id || u._id;
+                                        return (
+                                        <tr key={userId} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
                                             className="hover:bg-white/5 transition-colors">
                                             <td className="px-5 py-3.5 font-semibold text-white">{u.name}</td>
                                             <td className="px-5 py-3.5 text-gray-400">{u.email}</td>
@@ -316,7 +326,7 @@ const ManageUsers = () => {
                                                     </span>
                                                     <select
                                                         value={u.role}
-                                                        onChange={(e) => updateRole(u._id, e.target.value)}
+                                                        onChange={(e) => updateRole(userId, e.target.value)}
                                                         className="text-xs rounded-lg px-2 py-1 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                                         style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}
                                                     >
@@ -327,7 +337,7 @@ const ManageUsers = () => {
                                             <td className="px-5 py-3.5 text-gray-400 text-xs">
                                                 {u.department ? `${u.department}${u.year ? ` · Y${u.year}` : ''}` : '—'}
                                             </td>
-                                            <td className="px-5 py-3.5 text-gray-500 text-xs">{formatDate(u.createdAt)}</td>
+                                            <td className="px-5 py-3.5 text-gray-500 text-xs">{formatDate(u.created_at || u.createdAt)}</td>
                                             <td className="px-5 py-3.5">
                                                 <div className="flex items-center gap-1.5">
                                                     <button
@@ -339,7 +349,7 @@ const ManageUsers = () => {
                                                         Edit
                                                     </button>
                                                     <button
-                                                        onClick={() => deleteUser(u._id)}
+                                                        onClick={() => deleteUser(userId)}
                                                         title="Delete user"
                                                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors"
                                                     >
@@ -349,7 +359,7 @@ const ManageUsers = () => {
                                                 </div>
                                             </td>
                                         </tr>
-                                    ))}
+                                    );})}
                                 </tbody>
                             </table>
                         </div>
@@ -395,11 +405,13 @@ const ManageUsers = () => {
                                                 {eventSearch ? `No events matching "${eventSearch}"` : 'No events found'}
                                             </td>
                                         </tr>
-                                    ) : filteredEvents.map((ev) => (
-                                        <tr key={ev._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+                                    ) : filteredEvents.map((ev) => {
+                                        const eventId = ev.id || ev._id;
+                                        return (
+                                        <tr key={eventId} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
                                             className="hover:bg-white/5 transition-colors">
                                             <td className="px-5 py-3.5 font-semibold text-white max-w-xs truncate">{ev.title}</td>
-                                            <td className="px-5 py-3.5 text-gray-400">{ev.organizer?.name || '—'}</td>
+                                            <td className="px-5 py-3.5 text-gray-400">{ev.profiles?.name || ev.organizer?.name || '—'}</td>
                                             <td className="px-5 py-3.5 text-gray-500 text-xs">{formatDate(ev.date)}</td>
                                             <td className="px-5 py-3.5">
                                                 <StatusBadge status={ev.status} />
@@ -407,7 +419,7 @@ const ManageUsers = () => {
                                             <td className="px-5 py-3.5">
                                                 <div className="flex items-center gap-1.5 flex-wrap">
                                                     <button
-                                                        onClick={() => setEventStatus(ev._id, 'upcoming')}
+                                                        onClick={() => setEventStatus(eventId, 'upcoming')}
                                                         disabled={ev.status === 'upcoming'}
                                                         title="Approve & publish event"
                                                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -416,7 +428,7 @@ const ManageUsers = () => {
                                                         Approve
                                                     </button>
                                                     <button
-                                                        onClick={() => setEventStatus(ev._id, 'cancelled')}
+                                                        onClick={() => setEventStatus(eventId, 'cancelled')}
                                                         disabled={ev.status === 'cancelled'}
                                                         title="Cancel event"
                                                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -427,7 +439,7 @@ const ManageUsers = () => {
                                                 </div>
                                             </td>
                                         </tr>
-                                    ))}
+                                    );})}
                                 </tbody>
                             </table>
                         </div>

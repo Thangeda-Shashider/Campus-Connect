@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { CalendarDays, Filter, CheckCircle2, Clock, XCircle, Search, Edit2 } from 'lucide-react';
-import api from '../../api/axios.js';
+import { adminGetAllEvents, adminUpdateEventStatus } from '../../lib/api/admin.js';
 import { formatDate } from '../../utils/formatDate.js';
 import { cn } from '../../lib/utils.js';
 
@@ -14,8 +14,8 @@ const ManageAdminEvents = () => {
     const fetchEvents = async () => {
         setLoading(true);
         try {
-            const res = await api.get('/admin/events');
-            setEvents(res.data.data);
+            const data = await adminGetAllEvents();
+            setEvents(data);
         } catch (err) {
             toast.error('Failed to load events');
         } finally {
@@ -29,16 +29,17 @@ const ManageAdminEvents = () => {
 
     const updateEventStatus = async (id, newStatus) => {
         try {
-            await api.put(`/admin/events/${id}/status`, { status: newStatus });
+            await adminUpdateEventStatus(id, newStatus);
             toast.success(`Event status updated to ${newStatus}`);
-            setEvents((prev) => prev.map((e) => e._id === id ? { ...e, status: newStatus } : e));
+            setEvents((prev) => prev.map((e) => (e.id || e._id) === id ? { ...e, status: newStatus } : e));
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Failed to update status');
+            toast.error(err.message || 'Failed to update status');
         }
     };
 
     const filtered = events.filter((e) => {
-        const matchesSearch = !search || e.title.toLowerCase().includes(search.toLowerCase()) || e.organizer?.name?.toLowerCase().includes(search.toLowerCase());
+        const orgName = e.profiles?.name || e.organizer?.name || '';
+        const matchesSearch = !search || e.title.toLowerCase().includes(search.toLowerCase()) || orgName.toLowerCase().includes(search.toLowerCase());
         const matchesStatus = statusFilter === 'all' || e.status === statusFilter;
         return matchesSearch && matchesStatus;
     });
@@ -109,17 +110,19 @@ const ManageAdminEvents = () => {
                             ) : filtered.length === 0 ? (
                                 <tr><td colSpan="5" className="px-6 py-10 text-center text-gray-500">No events found.</td></tr>
                             ) : (
-                                filtered.map((event) => (
-                                    <tr key={event._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                filtered.map((event) => {
+                                    const eventId = event.id || event._id;
+                                    return (
+                                    <tr key={eventId} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="font-medium text-gray-900 dark:text-white max-w-[250px] truncate" title={event.title}>
-                                                {event.title}
+                                                 {event.title}
                                             </div>
                                             <div className="text-xs text-indigo-500 mt-1">{event.category}</div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="text-gray-900 dark:text-white">{event.organizer?.name || 'Unknown'}</div>
-                                            <div className="text-xs text-gray-500">{event.organizer?.email}</div>
+                                            <div className="text-gray-900 dark:text-white">{event.profiles?.name || event.organizer?.name || 'Unknown'}</div>
+                                            <div className="text-xs text-gray-500">{event.profiles?.email || event.organizer?.email}</div>
                                         </td>
                                         <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
                                             {formatDate(event.date)}
@@ -130,17 +133,16 @@ const ManageAdminEvents = () => {
                                         <td className="px-6 py-4 text-right">
                                             <select
                                                 value={event.status}
-                                                onChange={(e) => updateEventStatus(event._id, e.target.value)}
+                                                onChange={(e) => updateEventStatus(eventId, e.target.value)}
                                                 className="text-xs px-2 py-1.5 border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 outline-none focus:ring-1 focus:ring-indigo-500"
                                             >
                                                 <option value="upcoming">Mark Upcoming</option>
                                                 <option value="completed">Mark Completed</option>
                                                 <option value="cancelled">Mark Cancelled</option>
-                                                <option value="draft">Mark Draft</option>
                                             </select>
                                         </td>
                                     </tr>
-                                ))
+                                );})
                             )}
                         </tbody>
                     </table>

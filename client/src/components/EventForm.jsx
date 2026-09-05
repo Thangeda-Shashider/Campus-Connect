@@ -40,7 +40,7 @@ const eventSchema = z.object({
  */
 const EventForm = ({ defaultValues, onSubmit, isLoading = false }) => {
     const [showFormBuilder, setShowFormBuilder] = useState(
-        (defaultValues?.registrationFormFields?.length ?? 0) > 0
+        ((defaultValues?.registration_form_fields || defaultValues?.registrationFormFields)?.length ?? 0) > 0
     );
 
     const {
@@ -54,14 +54,15 @@ const EventForm = ({ defaultValues, onSubmit, isLoading = false }) => {
         defaultValues: {
             ...defaultValues,
             date: defaultValues?.date ? toInputDatetime(defaultValues.date) : '',
-            registrationDeadline: defaultValues?.registrationDeadline
-                ? toInputDatetime(defaultValues.registrationDeadline)
+            registrationDeadline: (defaultValues?.registration_deadline || defaultValues?.registrationDeadline)
+                ? toInputDatetime(defaultValues?.registration_deadline || defaultValues?.registrationDeadline)
                 : '',
+            maxSeats: (defaultValues?.max_seats ?? defaultValues?.maxSeats)?.toString() ?? '',
             tags: defaultValues?.tags?.join(', ') ?? '',
-            hasCertificate: defaultValues?.hasCertificate ?? false,
-            paymentRequired: defaultValues?.paymentRequired ?? false,
-            paymentAmount: defaultValues?.paymentAmount?.toString() ?? '',
-            registrationFormFields: defaultValues?.registrationFormFields ?? [],
+            hasCertificate: defaultValues?.has_certificate ?? defaultValues?.hasCertificate ?? false,
+            paymentRequired: defaultValues?.payment_required ?? defaultValues?.paymentRequired ?? false,
+            paymentAmount: (defaultValues?.payment_amount ?? defaultValues?.paymentAmount)?.toString() ?? '',
+            registrationFormFields: defaultValues?.registration_form_fields ?? defaultValues?.registrationFormFields ?? [],
         },
     });
 

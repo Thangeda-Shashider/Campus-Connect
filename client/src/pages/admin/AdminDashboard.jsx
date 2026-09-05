@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Users, CalendarDays, ClipboardList, TrendingUp, Plus, ShieldCheck, Award } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import api from '../../api/axios.js';
+import { getPlatformStats } from '../../lib/api/admin.js';
 
 const StatCard = ({ icon, label, value, color }) => (
     <div className="rounded-2xl p-6 flex items-center gap-4 shadow-sm transition-all hover:scale-[1.02]"
@@ -40,8 +40,8 @@ const AdminDashboard = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        api.get('/admin/stats')
-            .then((res) => setStats(res.data.data))
+        getPlatformStats()
+            .then((data) => setStats(data))
             .catch(() => setStats(null))
             .finally(() => setLoading(false));
     }, []);

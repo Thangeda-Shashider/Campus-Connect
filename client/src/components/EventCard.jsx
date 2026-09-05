@@ -31,19 +31,23 @@ const EventCard = ({ event, skeleton = false }) => {
         );
     }
 
+    const eventId = event.id || event._id;
+    const maxSeats = event.max_seats ?? event.maxSeats;
+    const regCount = event.registration_count ?? event.registrationCount ?? 0;
     const seatsRemaining =
-        event.maxSeats != null
-            ? event.maxSeats - (event.registrationCount ?? 0)
+        maxSeats != null
+            ? maxSeats - regCount
             : null;
     const full = seatsRemaining !== null && seatsRemaining <= 0;
-    const deadline = new Date(event.registrationDeadline) < new Date();
+    const deadlineDate = event.registration_deadline || event.registrationDeadline;
+    const deadline = deadlineDate ? new Date(deadlineDate) < new Date() : false;
 
     return (
         <div className="rounded-2xl border bg-white dark:bg-gray-900 dark:border-gray-800 overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col">
             {/* Banner */}
             <div className="relative h-44 overflow-hidden bg-gray-100 dark:bg-gray-800">
                 <img
-                    src={event.bannerUrl || `https://picsum.photos/seed/${event._id}/600/300`}
+                    src={event.banner_url || event.bannerUrl || `https://picsum.photos/seed/${eventId}/600/300`}
                     alt={event.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
@@ -87,7 +91,7 @@ const EventCard = ({ event, skeleton = false }) => {
 
                 <div className="mt-auto pt-2">
                     <Link
-                        to={`/events/${event._id}`}
+                        to={`/events/${eventId}`}
                         className={cn(
                             'block w-full text-center text-sm font-medium py-2 rounded-lg transition-colors',
                             full || deadline

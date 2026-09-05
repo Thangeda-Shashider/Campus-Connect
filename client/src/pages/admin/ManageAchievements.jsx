@@ -12,7 +12,12 @@ import {
     Building2,
     Calendar,
 } from 'lucide-react';
-import api from '../../api/axios.js';
+import {
+    getAllAchievements,
+    reviewAchievement,
+    getProofFileUrl,
+    exportAchievementsCsv,
+} from '../../lib/api/achievements.js';
 import { formatDate } from '../../utils/formatDate.js';
 import { cn } from '../../lib/utils.js';
 
@@ -35,14 +40,13 @@ const ManageAchievements = () => {
     const fetchAchievements = async () => {
         setLoading(true);
         try {
-            const params = new URLSearchParams();
-            if (month) params.append('month', month);
-            if (year) params.append('year', year);
-            if (status) params.append('status', status);
-            if (department) params.append('department', department);
-
-            const res = await api.get(`/achievements?${params.toString()}`);
-            setAchievements(res.data.data);
+            const data = await getAllAchievements({
+                month: month ? Number(month) : undefined,
+                year: year ? Number(year) : undefined,
+                status: status || undefined,
+                department: department || undefined,
+            });
+            setAchievements(data || []);
         } catch (err) {
             toast.error('Failed to load achievements');
         } finally {
@@ -54,43 +58,42 @@ const ManageAchievements = () => {
         fetchAchievements();
     }, [month, year, status, department]);
 
-    const handleExportCSV = async () => {
+    const handleExportCSV = () => {
         try {
-            const params = new URLSearchParams();
-            if (month) params.append('month', month);
-            if (year) params.append('year', year);
-            if (status) params.append('status', status);
-            if (department) params.append('department', department);
-
-            const response = await api.get(`/achievements/export?${params.toString()}`, {
-                responseType: 'blob', // Important for file downloads
-            });
-
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `achievements-${month || 'all'}-${year || 'all'}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            link.parentNode.removeChild(link);
+            exportAchievementsCsv(achievements, `achievements-${month || 'all'}-${year || 'all'}.csv`);
+            toast.success('CSV exported successfully');
         } catch (err) {
             toast.error('Failed to export CSV');
+        }
+    };
+
+    const handleViewProof = async (proofUrl) => {
+        if (!proofUrl) {
+            toast.error('No proof file available');
+            return;
+        }
+        if (proofUrl.startsWith('http://') || proofUrl.startsWith('https://')) {
+            window.open(proofUrl, '_blank');
+            return;
+        }
+        try {
+            const signedUrl = await getProofFileUrl(proofUrl);
+            window.open(signedUrl, '_blank');
+        } catch {
+            toast.error('Failed to load proof file');
         }
     };
 
     const updateStatus = async (id, newStatus, reason = null) => {
         setIsUpdating(id);
         try {
-            const payload = { status: newStatus };
-            if (reason) payload.rejectionReason = reason;
-
-            await api.patch(`/achievements/${id}/status`, payload);
+            await reviewAchievement(id, newStatus, reason);
             toast.success(`Achievement marked as ${newStatus}`);
             setShowRejectModal(null);
             setRejectReason('');
             fetchAchievements(); // Refresh list to get updated data
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Failed to update status');
+            toast.error(err.message || 'Failed to update status');
         } finally {
             setIsUpdating(null);
         }
@@ -204,20 +207,28 @@ const ManageAchievements = () => {
                                     </td>
                                 </tr>
                             ) : (
-                                achievements.map((a) => (
-                                    <tr key={a._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                achievements.map((a) => {
+                                    const achId = a.id || a._id;
+                                    const student = a.profiles || a.student || {};
+                                    const proofUrl = a.proof_file_url || a.proofFileUrl;
+                                    const issuingOrg = a.issuing_organization || a.issuingOrganization;
+                                    const compDate = a.completion_date || a.completionDate;
+                                    const rejReason = a.rejection_reason || a.rejectionReason;
+
+                                    return (
+                                    <tr key={achId} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                                         {/* Student Info */}
                                         <td className="px-6 py-4">
                                             <div className="font-medium text-gray-900 dark:text-white">
-                                                {a.student?.name || 'Unknown'}
+                                                {student.name || 'Unknown'}
                                             </div>
                                             <div className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
-                                                <span>{a.student?.department || 'N/A'}</span>
+                                                <span>{student.department || 'N/A'}</span>
                                                 <span>•</span>
-                                                <span>Year {a.student?.year || 'N/A'}</span>
+                                                <span>Year {student.year || 'N/A'}</span>
                                             </div>
                                             <div className="text-xs text-gray-400 mt-0.5 truncate max-w-[150px]">
-                                                {a.student?.email}
+                                                {student.email}
                                             </div>
                                         </td>
 
@@ -235,27 +246,26 @@ const ManageAchievements = () => {
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400 mb-1">
                                                 <Building2 className="w-3.5 h-3.5" />
-                                                <span className="truncate max-w-[150px]" title={a.issuingOrganization}>
-                                                    {a.issuingOrganization}
+                                                <span className="truncate max-w-[150px]" title={issuingOrg}>
+                                                    {issuingOrg}
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
                                                 <Calendar className="w-3.5 h-3.5" />
-                                                {formatDate(a.completionDate)}
+                                                {formatDate(compDate)}
                                             </div>
                                         </td>
 
                                         {/* Proof */}
                                         <td className="px-6 py-4">
-                                            <a
-                                                href={a.proofFileUrl}
-                                                target="_blank"
-                                                rel="noreferrer"
+                                            <button
+                                                type="button"
+                                                onClick={() => handleViewProof(proofUrl)}
                                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 text-xs font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
                                             >
                                                 <FileText className="w-3.5 h-3.5" />
                                                 View File
-                                            </a>
+                                            </button>
                                         </td>
 
                                         {/* Status */}
@@ -270,8 +280,8 @@ const ManageAchievements = () => {
                                                         <span className="flex items-center gap-1 text-xs px-2.5 py-1 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-full font-medium">
                                                             <XCircle className="w-3.5 h-3.5" /> Rejected
                                                         </span>
-                                                        <span className="text-[10px] text-red-500 mt-1 max-w-[100px] truncate" title={a.rejectionReason}>
-                                                            {a.rejectionReason}
+                                                        <span className="text-[10px] text-red-500 mt-1 max-w-[100px] truncate" title={rejReason}>
+                                                            {rejReason}
                                                         </span>
                                                     </div>
                                                 ) : (
@@ -287,16 +297,16 @@ const ManageAchievements = () => {
                                             {a.status === 'pending' ? (
                                                 <div className="flex items-center justify-end gap-2">
                                                     <button
-                                                        onClick={() => updateStatus(a._id, 'approved')}
-                                                        disabled={isUpdating === a._id}
+                                                        onClick={() => updateStatus(achId, 'approved')}
+                                                        disabled={isUpdating === achId}
                                                         className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors disabled:opacity-50"
                                                         title="Approve"
                                                     >
                                                         <CheckCircle2 className="w-5 h-5" />
                                                     </button>
                                                     <button
-                                                        onClick={() => setShowRejectModal(a._id)}
-                                                        disabled={isUpdating === a._id}
+                                                        onClick={() => setShowRejectModal(achId)}
+                                                        disabled={isUpdating === achId}
                                                         className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
                                                         title="Reject"
                                                     >
@@ -308,7 +318,7 @@ const ManageAchievements = () => {
                                             )}
                                         </td>
                                     </tr>
-                                ))
+                                );})
                             )}
                         </tbody>
                     </table>

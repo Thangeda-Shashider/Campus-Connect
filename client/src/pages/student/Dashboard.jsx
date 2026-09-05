@@ -5,7 +5,7 @@ import {
     ChevronDown, ChevronUp, ExternalLink, FileText, CreditCard,
     ShieldCheck,
 } from 'lucide-react';
-import api from '../../api/axios.js';
+import { getMyRegistrations } from '../../lib/api/registrations.js';
 import useAuth from '../../hooks/useAuth.js';
 import QRDisplay from '../../components/QRDisplay.jsx';
 import { formatDate, formatDateTime } from '../../utils/formatDate.js';
@@ -25,8 +25,8 @@ const Dashboard = () => {
         const load = async () => {
             setLoading(true);
             try {
-                const regRes = await api.get('/registrations/my');
-                setRegistrations(regRes.data.data);
+                const data = await getMyRegistrations();
+                setRegistrations(data || []);
             } catch {
                 setRegistrations([]);
             } finally {
@@ -37,8 +37,14 @@ const Dashboard = () => {
     }, []);
 
     const now = new Date();
-    const upcoming = registrations.filter((r) => r.event && new Date(r.event.date) >= now);
-    const past = registrations.filter((r) => r.event && new Date(r.event.date) < now);
+    const upcoming = registrations.filter((r) => {
+        const event = r.events || r.event;
+        return event && new Date(event.date) >= now;
+    });
+    const past = registrations.filter((r) => {
+        const event = r.events || r.event;
+        return event && new Date(event.date) < now;
+    });
     const currentList = activeTab === 'Upcoming' ? upcoming : past;
 
     const showQR = (token, title) => {
@@ -119,7 +125,7 @@ const Dashboard = () => {
                 <div className="space-y-4">
                     {currentList.map((reg) => (
                         <RegistrationCard
-                            key={reg._id}
+                            key={reg.id || reg._id}
                             reg={reg}
                             isPast={activeTab === 'Past'}
                             onShowQR={showQR}
@@ -137,13 +143,19 @@ const Dashboard = () => {
 /* ─── Registration Card ─────────────────────────────────────────── */
 const RegistrationCard = ({ reg, isPast, onShowQR }) => {
     const [expanded, setExpanded] = useState(false);
-    const event = reg.event;
+    const event = reg.events || reg.event;
     if (!event) return null;
 
-    const hasCert = event.hasCertificate;
+    const regId = reg.id || reg._id;
+    const eventId = event.id || event._id;
+    const hasCert = event.has_certificate ?? event.hasCertificate;
+    const isPaid = event.payment_required ?? event.paymentRequired;
     const attended = reg.attended;
-    const certIssued = reg.certificateIssued;
-    const formResponses = reg.formResponses ? Object.entries(reg.formResponses) : [];
+    const certIssued = reg.certificate_issued ?? reg.certificateIssued;
+    const paymentStatus = reg.payment_status || reg.paymentStatus;
+    const qrToken = reg.qr_token || reg.qrToken;
+    const bannerUrl = event.banner_url || event.bannerUrl || `https://picsum.photos/seed/${eventId}/160/160`;
+    const formResponses = reg.form_responses ? Object.entries(reg.form_responses) : (reg.formResponses ? Object.entries(reg.formResponses) : []);
 
     return (
         <div className="rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden transition-all">
@@ -152,7 +164,7 @@ const RegistrationCard = ({ reg, isPast, onShowQR }) => {
                 {/* Thumbnail */}
                 <div className="w-20 h-20 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0">
                     <img
-                        src={event.bannerUrl || `https://picsum.photos/seed/${event._id}/160/160`}
+                        src={bannerUrl}
                         alt=""
                         className="w-full h-full object-cover"
                     />
@@ -165,11 +177,11 @@ const RegistrationCard = ({ reg, isPast, onShowQR }) => {
                             <h3 className="font-semibold text-gray-900 dark:text-white text-base truncate">{event.title}</h3>
                             <div className="flex flex-wrap items-center gap-3 mt-1">
                                 <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                                    <Calendar className="w-3 h-3" />
+                                    <Calendar className="w-3.5 h-3.5" />
                                     {formatDate(event.date)}
                                 </span>
                                 <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                                    <MapPin className="w-3 h-3" />
+                                    <MapPin className="w-3.5 h-3.5" />
                                     {event.venue}
                                 </span>
                             </div>
@@ -180,32 +192,32 @@ const RegistrationCard = ({ reg, isPast, onShowQR }) => {
                             {isPast ? (
                                 attended ? (
                                     <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                                        <CheckCircle2 className="w-3 h-3" /> Attended
+                                        <CheckCircle2 className="w-3.5 h-3.5" /> Attended
                                     </span>
                                 ) : (
                                     <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                                        <XCircle className="w-3 h-3" /> Not Attended
+                                        <XCircle className="w-3.5 h-3.5" /> Not Attended
                                     </span>
                                 )
                             ) : (
                                 <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400">
-                                    <Clock className="w-3 h-3" /> Registered
+                                    <Clock className="w-3.5 h-3.5" /> Registered
                                 </span>
                             )}
 
                             {/* Payment status badge */}
-                            {event.paymentRequired && reg.paymentStatus && reg.paymentStatus !== 'not_required' && (
-                                reg.paymentStatus === 'verified' ? (
+                            {isPaid && paymentStatus && paymentStatus !== 'not_required' && (
+                                paymentStatus === 'verified' ? (
                                     <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                                        <ShieldCheck className="w-3 h-3" /> Payment Verified
+                                        <ShieldCheck className="w-3.5 h-3.5" /> Payment Verified
                                     </span>
-                                ) : reg.paymentStatus === 'rejected' ? (
+                                ) : paymentStatus === 'rejected' ? (
                                     <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400">
-                                        <XCircle className="w-3 h-3" /> Payment Rejected
+                                        <XCircle className="w-3.5 h-3.5" /> Payment Rejected
                                     </span>
                                 ) : (
                                     <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                                        <Clock className="w-3 h-3" /> Payment Pending
+                                        <Clock className="w-3.5 h-3.5" /> Payment Pending
                                     </span>
                                 )
                             )}
@@ -214,11 +226,11 @@ const RegistrationCard = ({ reg, isPast, onShowQR }) => {
                             {isPast && hasCert && (
                                 certIssued ? (
                                     <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                                        <Award className="w-3 h-3" /> Certificate Issued ✓
+                                        <Award className="w-3.5 h-3.5" /> Certificate Issued ✓
                                     </span>
                                 ) : (
                                     <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-gray-100 text-gray-400 dark:bg-gray-800">
-                                        <Award className="w-3 h-3" /> Certificate Pending
+                                        <Award className="w-3.5 h-3.5" /> Certificate Pending
                                     </span>
                                 )
                             )}
@@ -227,9 +239,9 @@ const RegistrationCard = ({ reg, isPast, onShowQR }) => {
 
                     {/* Action buttons */}
                     <div className="flex items-center gap-2 mt-3 flex-wrap">
-                        {!isPast && (
+                        {!isPast && qrToken && (
                             <button
-                                onClick={() => onShowQR(reg.qrToken, event.title)}
+                                onClick={() => onShowQR(qrToken, event.title)}
                                 className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 font-medium transition-colors"
                             >
                                 <QrCode className="w-3.5 h-3.5" />
@@ -238,7 +250,7 @@ const RegistrationCard = ({ reg, isPast, onShowQR }) => {
                         )}
 
                         <Link
-                            to={`/events/${event._id}`}
+                            to={`/events/${eventId}`}
                             className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 font-medium transition-colors"
                         >
                             <ExternalLink className="w-3.5 h-3.5" />

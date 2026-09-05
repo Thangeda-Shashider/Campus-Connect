@@ -230,3 +230,35 @@ export const cancelRegistration = async (registrationId) => {
         .eq('id', registrationId);
     if (error) throw error;
 };
+
+/**
+ * Export event registrants to client-side CSV download.
+ * @param {object[]} registrants - rows from getEventRegistrants (profiles joined)
+ * @param {string} [eventTitle='event']
+ */
+export const exportRegistrantsCsv = (registrants, eventTitle = 'event') => {
+    const headers = ['Name', 'Email', 'Roll No', 'Department', 'Year', 'Attended', 'Payment Status', 'Registered At'];
+    const rows = registrants.map((r) => [
+        r.profiles?.name ?? '',
+        r.profiles?.email ?? '',
+        r.profiles?.roll_no ?? '',
+        r.profiles?.department ?? '',
+        r.profiles?.year ?? '',
+        r.attended ? 'Yes' : 'No',
+        r.payment_status ?? 'not_required',
+        r.registered_at ? new Date(r.registered_at).toLocaleDateString() : '',
+    ]);
+
+    const csv = [headers, ...rows]
+        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${eventTitle.toLowerCase().replace(/[^a-z0-9]/gi, '_')}_registrants.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+};
+

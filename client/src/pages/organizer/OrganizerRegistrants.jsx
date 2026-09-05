@@ -7,7 +7,17 @@ import {
     UserCheck, UserX, ScanLine,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../../api/axios.js';
+import { getEventById } from '../../lib/api/events.js';
+import {
+    getEventRegistrants,
+    toggleAttendance,
+    setCertificateIssued,
+    verifyPayment,
+    rejectPayment,
+    getPaymentScreenshotUrl,
+    checkInByQrToken,
+    exportRegistrantsCsv,
+} from '../../lib/api/registrations.js';
 import QRScanner from '../../components/QRScanner.jsx';
 import { formatDate, formatDateTime } from '../../utils/formatDate.js';
 import { cn } from '../../lib/utils.js';
@@ -49,7 +59,7 @@ const ScreenshotModal = ({ url, onClose }) => (
 );
 
 /* ─── QR Scanner Modal ──────────────────────────────────────────── */
-const QRScanModal = ({ onClose, onScan }) => {
+const QRScanModal = ({ onClose, onScan, currentEventId }) => {
     const [result, setResult] = useState(null);
     const [processing, setProcessing] = useState(false);
 
@@ -57,15 +67,17 @@ const QRScanModal = ({ onClose, onScan }) => {
         if (processing) return;
         setProcessing(true);
         try {
-            const res = await api.post('/registrations/checkin', { qrToken });
-            if (res.data.success) {
-                const reg = res.data.data;
-                setResult({ success: true, name: reg.user?.name, dept: reg.user?.department, registrationId: reg._id });
-                toast.success(`✓ Checked in: ${reg.user?.name}`);
-                onScan(reg._id);
+            const reg = await checkInByQrToken(qrToken);
+            if (currentEventId && reg.event_id && reg.event_id !== currentEventId) {
+                throw new Error('This ticket belongs to a different event');
             }
+            const profile = reg.profiles || reg.profile || reg.user;
+            const regId = reg.id || reg._id;
+            setResult({ success: true, name: profile?.name, dept: profile?.department, registrationId: regId });
+            toast.success(`✓ Checked in: ${profile?.name}`);
+            onScan(regId);
         } catch (err) {
-            setResult({ success: false, error: err.response?.data?.error || 'Invalid QR code' });
+            setResult({ success: false, error: err.message || 'Invalid QR code' });
         } finally {
             setProcessing(false);
         }
@@ -152,14 +164,14 @@ const OrganizerRegistrants = () => {
         const load = async () => {
             setLoading(true);
             try {
-                const [evRes, regRes] = await Promise.all([
-                    api.get(`/events/${eventId}`),
-                    api.get(`/registrations/event/${eventId}`),
+                const [eventData, regData] = await Promise.all([
+                    getEventById(eventId),
+                    getEventRegistrants(eventId),
                 ]);
-                setEvent(evRes.data.data);
-                setRegistrations(regRes.data.data);
+                setEvent(eventData);
+                setRegistrations(regData || []);
             } catch (err) {
-                toast.error(err.response?.data?.error || 'Failed to load registrants');
+                toast.error(err.message || 'Failed to load registrants');
             } finally {
                 setLoading(false);
             }
@@ -169,73 +181,108 @@ const OrganizerRegistrants = () => {
 
     const handleToggleAttendance = async (regId, currentlyAttended) => {
         try {
-            const res = await api.patch(`/registrations/${regId}/attendance`, {
-                attended: !currentlyAttended,
-            });
-            if (res.data.success) {
-                setRegistrations((prev) =>
-                    prev.map((r) => r._id === regId ? { ...r, attended: res.data.data.attended } : r)
-                );
-                toast.success(res.data.data.attended ? '✓ Marked as attended' : 'Removed attendance mark');
-            }
+            const updated = await toggleAttendance(regId, !currentlyAttended);
+            setRegistrations((prev) =>
+                prev.map((r) => ((r.id || r._id) === regId ? { ...r, attended: updated.attended } : r))
+            );
+            toast.success(updated.attended ? '✓ Marked as attended' : 'Removed attendance mark');
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Failed to update attendance');
+            toast.error(err.message || 'Failed to update attendance');
         }
     };
 
     const handleQRCheckIn = (registrationId) => {
         setRegistrations((prev) =>
-            prev.map((r) => r._id === registrationId ? { ...r, attended: true } : r)
+            prev.map((r) => ((r.id || r._id) === registrationId ? { ...r, attended: true } : r))
         );
     };
 
     const handleIssueCertificate = async (regId, issue) => {
         try {
-            const res = await api.patch(`/registrations/${regId}/certificate`, { issue });
-            if (res.data.success) {
-                setRegistrations((prev) =>
-                    prev.map((r) => r._id === regId ? {
-                        ...r,
-                        certificateIssued: res.data.data.certificateIssued,
-                        certificateIssuedAt: res.data.data.certificateIssuedAt,
-                    } : r)
-                );
-                toast.success(issue ? 'Certificate issued!' : 'Certificate revoked');
-            }
+            const updated = await setCertificateIssued(regId, issue);
+            setRegistrations((prev) =>
+                prev.map((r) => ((r.id || r._id) === regId ? {
+                    ...r,
+                    certificate_issued: updated.certificate_issued,
+                    certificate_issued_at: updated.certificate_issued_at,
+                    certificateIssued: updated.certificate_issued,
+                    certificateIssuedAt: updated.certificate_issued_at,
+                } : r))
+            );
+            toast.success(issue ? 'Certificate issued!' : 'Certificate revoked');
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Failed to update certificate');
+            toast.error(err.message || 'Failed to update certificate');
         }
     };
 
     const handleVerifyPayment = async (regId, status, rejectionReason) => {
         try {
-            const res = await api.patch(`/registrations/${regId}/payment-verify`, { status, rejectionReason });
-            if (res.data.success) {
-                setRegistrations((prev) =>
-                    prev.map((r) => r._id === regId ? {
-                        ...r,
-                        paymentStatus: res.data.data.paymentStatus,
-                        paymentVerifiedAt: res.data.data.paymentVerifiedAt,
-                    } : r)
-                );
-                toast.success(status === 'verified' ? '✅ Payment verified!' : '❌ Payment rejected');
+            let updated;
+            if (status === 'verified') {
+                updated = await verifyPayment(regId);
+            } else {
+                updated = await rejectPayment(regId, rejectionReason);
             }
+            setRegistrations((prev) =>
+                prev.map((r) => ((r.id || r._id) === regId ? {
+                    ...r,
+                    payment_status: updated.payment_status,
+                    payment_verified_at: updated.payment_verified_at,
+                    paymentStatus: updated.payment_status,
+                    paymentVerifiedAt: updated.payment_verified_at,
+                } : r))
+            );
+            toast.success(status === 'verified' ? '✅ Payment verified!' : '❌ Payment rejected');
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Failed to update payment status');
+            toast.error(err.message || 'Failed to update payment status');
+        }
+    };
+
+    const handleViewScreenshot = async (pathOrUrl) => {
+        if (!pathOrUrl) return;
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+            setScreenshotModal(pathOrUrl);
+            return;
+        }
+        try {
+            const signedUrl = await getPaymentScreenshotUrl(pathOrUrl);
+            setScreenshotModal(signedUrl);
+        } catch {
+            toast.error('Failed to load payment screenshot');
+        }
+    };
+
+    const handleExportCSV = () => {
+        try {
+            exportRegistrantsCsv(registrations, event?.title || 'event');
+            toast.success('Registrants exported successfully');
+        } catch {
+            toast.error('Failed to export CSV');
         }
     };
 
     const filtered = registrations.filter((r) => {
         const s = search.toLowerCase();
-        const matchSearch = !s || r.user?.name?.toLowerCase().includes(s) || r.user?.email?.toLowerCase().includes(s) || r.user?.department?.toLowerCase().includes(s);
-        const matchPayment = paymentFilter === 'all' || r.paymentStatus === paymentFilter;
+        const profile = r.profiles || r.profile || r.user || {};
+        const pStatus = r.payment_status || r.paymentStatus || 'not_required';
+        const matchSearch = !s ||
+            profile.name?.toLowerCase().includes(s) ||
+            profile.email?.toLowerCase().includes(s) ||
+            profile.department?.toLowerCase().includes(s);
+        const matchPayment = paymentFilter === 'all' || pStatus === paymentFilter;
         const matchAttendance = attendanceFilter === 'all' || (attendanceFilter === 'attended' ? r.attended : !r.attended);
         return matchSearch && matchPayment && matchAttendance;
     });
 
+    const hasCert = event?.has_certificate ?? event?.hasCertificate;
+    const isPaid = event?.payment_required ?? event?.paymentRequired;
+    const paymentAmount = event?.payment_amount ?? event?.paymentAmount;
+    const bannerUrl = event?.banner_url || event?.bannerUrl;
+    const eventIdVal = event?.id || event?._id;
+
     const attendedCount = registrations.filter((r) => r.attended).length;
-    const certIssuedCount = registrations.filter((r) => r.certificateIssued).length;
-    const pendingPayments = registrations.filter((r) => r.paymentStatus === 'pending').length;
+    const certIssuedCount = registrations.filter((r) => r.certificate_issued || r.certificateIssued).length;
+    const pendingPayments = registrations.filter((r) => (r.payment_status || r.paymentStatus) === 'pending').length;
     const isPastEvent = event ? new Date(event.date) < new Date() : false;
 
     if (loading) {
@@ -263,20 +310,20 @@ const OrganizerRegistrants = () => {
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                     <div className="flex gap-4">
                         <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0">
-                            <img src={event.bannerUrl || `https://picsum.photos/seed/${event._id}/120/120`} alt="" className="w-full h-full object-cover" />
+                            <img src={bannerUrl || `https://picsum.photos/seed/${eventIdVal}/120/120`} alt="" className="w-full h-full object-cover" />
                         </div>
                         <div>
                             <h1 className="text-xl font-bold text-gray-900 dark:text-white">{event.title}</h1>
                             <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{formatDateTime(event.date)} · {event.venue}</p>
                             <div className="flex flex-wrap gap-2 mt-2">
-                                {event.hasCertificate && (
+                                {hasCert && (
                                     <span className="flex items-center gap-1 text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800">
                                         <Award className="w-3 h-3" /> Certificates Enabled
                                     </span>
                                 )}
-                                {event.paymentRequired && (
+                                {isPaid && (
                                     <span className="flex items-center gap-1 text-xs bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 px-2.5 py-1 rounded-full border border-green-200 dark:border-green-800">
-                                        <CreditCard className="w-3 h-3" /> Paid — ₹{event.paymentAmount}
+                                        <CreditCard className="w-3 h-3" /> Paid — ₹{paymentAmount}
                                     </span>
                                 )}
                             </div>
@@ -289,7 +336,7 @@ const OrganizerRegistrants = () => {
                             <QrCode className="w-4 h-4" />
                             Scan QR Check-In
                         </button>
-                        <button onClick={() => window.open(`${import.meta.env.VITE_API_BASE_URL}/registrations/event/${eventId}/export`, '_blank')}
+                        <button onClick={handleExportCSV}
                             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                             <Download className="w-4 h-4" /> Export CSV
                         </button>
@@ -297,17 +344,17 @@ const OrganizerRegistrants = () => {
                 </div>
 
                 {/* Stats */}
-                <div className={cn('grid gap-4 mt-6 pt-6 border-t dark:border-gray-800', event.paymentRequired ? 'grid-cols-4' : event.hasCertificate ? 'grid-cols-3' : 'grid-cols-2')}>
+                <div className={cn('grid gap-4 mt-6 pt-6 border-t dark:border-gray-800', isPaid ? 'grid-cols-4' : hasCert ? 'grid-cols-3' : 'grid-cols-2')}>
                     <Stat label="Registered" value={registrations.length} icon={<Users className="w-5 h-5 text-indigo-500" />} color="text-indigo-600 dark:text-indigo-400" />
                     <Stat label="Attended" value={`${attendedCount} / ${registrations.length}`}
                         icon={<UserCheck className="w-5 h-5 text-green-500" />} color="text-green-600 dark:text-green-400"
                         sub={registrations.length > 0 ? `${Math.round((attendedCount / registrations.length) * 100)}% rate` : ''} />
-                    {event.paymentRequired && (
+                    {isPaid && (
                         <Stat label="Pending Payments" value={pendingPayments}
                             icon={<Clock className="w-5 h-5 text-amber-500" />} color="text-amber-600 dark:text-amber-400"
                             highlight={pendingPayments > 0} />
                     )}
-                    {event.hasCertificate && (
+                    {hasCert && (
                         <Stat label="Certs Issued" value={`${certIssuedCount} / ${attendedCount || registrations.length}`}
                             icon={<Award className="w-5 h-5 text-amber-500" />} color="text-amber-600 dark:text-amber-400" />
                     )}
@@ -315,7 +362,7 @@ const OrganizerRegistrants = () => {
             </div>
 
             {/* Alerts */}
-            {event.paymentRequired && pendingPayments > 0 && (
+            {isPaid && pendingPayments > 0 && (
                 <div className="mb-4 flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                     <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                     <p className="text-sm text-amber-700 dark:text-amber-300">
@@ -353,7 +400,7 @@ const OrganizerRegistrants = () => {
                             {f === 'all' ? 'All' : f === 'attended' ? '✓ Attended' : '✗ Absent'}
                         </button>
                     ))}
-                    {event.paymentRequired && ['pending', 'verified', 'rejected'].map((f) => (
+                    {isPaid && ['pending', 'verified', 'rejected'].map((f) => (
                         <button key={f} onClick={() => setPaymentFilter(paymentFilter === f ? 'all' : f)}
                             className={cn('px-3 py-2 rounded-lg text-xs font-medium capitalize transition-colors',
                                 paymentFilter === f ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700')}>
@@ -373,26 +420,29 @@ const OrganizerRegistrants = () => {
                 </div>
             ) : (
                 <div className="space-y-2">
-                    {filtered.map((reg) => (
-                        <RegistrantRow
-                            key={reg._id}
-                            reg={reg}
-                            event={event}
-                            isPastEvent={isPastEvent}
-                            isExpanded={expanded === reg._id}
-                            onToggle={() => setExpanded(expanded === reg._id ? null : reg._id)}
-                            onToggleAttendance={() => handleToggleAttendance(reg._id, reg.attended)}
-                            onIssueCert={handleIssueCertificate}
-                            onVerifyPayment={handleVerifyPayment}
-                            onViewScreenshot={(url) => setScreenshotModal(url)}
-                        />
-                    ))}
+                    {filtered.map((reg) => {
+                        const regId = reg.id || reg._id;
+                        return (
+                            <RegistrantRow
+                                key={regId}
+                                reg={reg}
+                                event={event}
+                                isPastEvent={isPastEvent}
+                                isExpanded={expanded === regId}
+                                onToggle={() => setExpanded(expanded === regId ? null : regId)}
+                                onToggleAttendance={() => handleToggleAttendance(regId, reg.attended)}
+                                onIssueCert={handleIssueCertificate}
+                                onVerifyPayment={handleVerifyPayment}
+                                onViewScreenshot={handleViewScreenshot}
+                            />
+                        );
+                    })}
                 </div>
             )}
 
             {/* Modals */}
             {screenshotModal && <ScreenshotModal url={screenshotModal} onClose={() => setScreenshotModal(null)} />}
-            {showQRScanner && <QRScanModal onClose={() => setShowQRScanner(false)} onScan={handleQRCheckIn} />}
+            {showQRScanner && <QRScanModal onClose={() => setShowQRScanner(false)} onScan={handleQRCheckIn} currentEventId={eventIdVal} />}
         </div>
     );
 };
@@ -404,7 +454,18 @@ const RegistrantRow = ({ reg, event, isPastEvent, isExpanded, onToggle, onToggle
     const [actionLoading, setActionLoading] = useState(null);
     const [attendanceLoading, setAttendanceLoading] = useState(false);
 
-    const formResponses = reg.formResponses ? Object.entries(reg.formResponses) : [];
+    const regId = reg.id || reg._id;
+    const profile = reg.profiles || reg.profile || reg.user || {};
+    const paymentStatus = reg.payment_status || reg.paymentStatus;
+    const paymentScreenshotUrl = reg.payment_screenshot_url || reg.paymentScreenshotUrl;
+    const certIssued = reg.certificate_issued ?? reg.certificateIssued;
+    const certIssuedAt = reg.certificate_issued_at || reg.certificateIssuedAt;
+    const registeredAt = reg.registered_at || reg.registeredAt;
+    const responses = reg.form_responses || reg.formResponses || {};
+    const formResponses = Object.entries(responses);
+
+    const hasCert = event?.has_certificate ?? event?.hasCertificate;
+    const isPaid = event?.payment_required ?? event?.paymentRequired;
 
     const doToggleAttendance = async () => {
         setAttendanceLoading(true);
@@ -414,7 +475,7 @@ const RegistrantRow = ({ reg, event, isPastEvent, isExpanded, onToggle, onToggle
 
     const doVerify = async (status) => {
         setActionLoading(status);
-        await onVerifyPayment(reg._id, status, status === 'rejected' ? rejectReason : undefined);
+        await onVerifyPayment(regId, status, status === 'rejected' ? rejectReason : undefined);
         setActionLoading(null);
         setRejecting(false);
         setRejectReason('');
@@ -427,24 +488,24 @@ const RegistrantRow = ({ reg, event, isPastEvent, isExpanded, onToggle, onToggle
                 {/* Avatar */}
                 <div className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
                     <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
-                        {reg.user?.name?.[0]?.toUpperCase() ?? '?'}
+                        {profile.name?.[0]?.toUpperCase() ?? '?'}
                     </span>
                 </div>
 
                 {/* Info */}
                 <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 dark:text-white text-sm truncate">{reg.user?.name ?? '—'}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{reg.user?.email}</p>
+                    <p className="font-medium text-gray-900 dark:text-white text-sm truncate">{profile.name ?? '—'}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{profile.email}</p>
                 </div>
 
                 {/* Dept / Year */}
                 <div className="hidden sm:flex items-center gap-2 shrink-0">
-                    {reg.user?.department && (
+                    {profile.department && (
                         <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-1 rounded-full">
-                            {reg.user.department}
+                            {profile.department}
                         </span>
                     )}
-                    {reg.user?.year && <span className="text-xs text-gray-400">Yr {reg.user.year}</span>}
+                    {profile.year && <span className="text-xs text-gray-400">Yr {profile.year}</span>}
                 </div>
 
                 {/* ── Attendance toggle button ── */}
@@ -477,29 +538,29 @@ const RegistrantRow = ({ reg, event, isPastEvent, isExpanded, onToggle, onToggle
                 </button>
 
                 {/* Payment status */}
-                {event.paymentRequired && (
+                {isPaid && (
                     <div className="hidden sm:block shrink-0">
-                        <PaymentBadge status={reg.paymentStatus} />
+                        <PaymentBadge status={paymentStatus} />
                     </div>
                 )}
 
                 {/* Certificate */}
-                {event.hasCertificate && isPastEvent && (
-                    <button onClick={() => onIssueCert(reg._id, !reg.certificateIssued)}
+                {hasCert && isPastEvent && (
+                    <button onClick={() => onIssueCert(regId, !certIssued)}
                         className={cn(
                             'hidden sm:flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-colors shrink-0',
-                            reg.certificateIssued
+                            certIssued
                                 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/50'
                                 : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-600 dark:hover:text-indigo-400'
                         )}>
                         <Award className="w-3.5 h-3.5" />
-                        {reg.certificateIssued ? 'Issued ✓' : 'Issue Cert'}
+                        {certIssued ? 'Issued ✓' : 'Issue Cert'}
                     </button>
                 )}
 
                 {/* Payment screenshot view */}
-                {event.paymentRequired && reg.paymentScreenshotUrl && (
-                    <button onClick={() => onViewScreenshot(reg.paymentScreenshotUrl)}
+                {isPaid && paymentScreenshotUrl && (
+                    <button onClick={() => onViewScreenshot(paymentScreenshotUrl)}
                         className="hidden sm:flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline shrink-0">
                         <Image className="w-3.5 h-3.5" /> Screenshot
                     </button>
@@ -516,7 +577,7 @@ const RegistrantRow = ({ reg, event, isPastEvent, isExpanded, onToggle, onToggle
             {isExpanded && (
                 <div className="border-t dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30 p-5 space-y-4">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <DetailItem label="Registered On" value={formatDate(reg.registeredAt)} />
+                        <DetailItem label="Registered On" value={formatDate(registeredAt)} />
                         <DetailItem label="Attendance" value={
                             <div className="flex items-center gap-2">
                                 <span className={cn('text-sm font-medium', reg.attended ? 'text-green-600 dark:text-green-400' : 'text-gray-400')}>
@@ -530,40 +591,40 @@ const RegistrantRow = ({ reg, event, isPastEvent, isExpanded, onToggle, onToggle
                                 </button>
                             </div>
                         } />
-                        {event.hasCertificate && (
+                        {hasCert && (
                             <DetailItem label="Certificate"
-                                value={reg.certificateIssued
-                                    ? <span className="text-amber-600 dark:text-amber-400 text-sm font-medium">✅ Issued{reg.certificateIssuedAt ? ` (${formatDate(reg.certificateIssuedAt)})` : ''}</span>
+                                value={certIssued
+                                    ? <span className="text-amber-600 dark:text-amber-400 text-sm font-medium">✅ Issued{certIssuedAt ? ` (${formatDate(certIssuedAt)})` : ''}</span>
                                     : <span className="text-gray-400 text-sm">⏳ Not issued</span>} />
                         )}
-                        {event.paymentRequired && (
-                            <DetailItem label="Payment" value={<PaymentBadge status={reg.paymentStatus} />} />
+                        {isPaid && (
+                            <DetailItem label="Payment" value={<PaymentBadge status={paymentStatus} />} />
                         )}
                     </div>
 
                     {/* Payment verification section */}
-                    {event.paymentRequired && (
+                    {isPaid && (
                         <div className="rounded-xl border dark:border-gray-700 overflow-hidden">
                             <div className="bg-white dark:bg-gray-900 px-4 py-2.5 border-b dark:border-gray-700 flex items-center gap-2">
                                 <CreditCard className="w-3.5 h-3.5 text-indigo-500" />
                                 <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Payment Verification</span>
                             </div>
                             <div className="bg-white dark:bg-gray-900 p-4 space-y-4">
-                                {reg.paymentScreenshotUrl ? (
+                                {paymentScreenshotUrl ? (
                                     <>
                                         <div className="flex gap-4">
                                             <div className="w-24 h-24 rounded-lg overflow-hidden border dark:border-gray-700 cursor-pointer hover:opacity-80 transition shrink-0"
-                                                onClick={() => onViewScreenshot(reg.paymentScreenshotUrl)}>
-                                                <img src={reg.paymentScreenshotUrl} alt="Payment" className="w-full h-full object-cover" />
+                                                onClick={() => onViewScreenshot(paymentScreenshotUrl)}>
+                                                <img src={paymentScreenshotUrl} alt="Payment" className="w-full h-full object-cover" />
                                             </div>
                                             <div className="flex-1 space-y-2">
                                                 <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Payment Screenshot</p>
                                                 <p className="text-xs text-gray-500">Click to view full size</p>
-                                                <PaymentBadge status={reg.paymentStatus} />
+                                                <PaymentBadge status={paymentStatus} />
                                             </div>
                                         </div>
 
-                                        {reg.paymentStatus === 'pending' && (
+                                        {paymentStatus === 'pending' && (
                                             !rejecting ? (
                                                 <div className="flex gap-2">
                                                     <button onClick={() => doVerify('verified')} disabled={actionLoading === 'verified'}
@@ -596,7 +657,7 @@ const RegistrantRow = ({ reg, event, isPastEvent, isExpanded, onToggle, onToggle
                                             )
                                         )}
 
-                                        {reg.paymentStatus === 'rejected' && (
+                                        {paymentStatus === 'rejected' && (
                                             <button onClick={() => doVerify('verified')}
                                                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold">
                                                 <ShieldCheck className="w-4 h-4" /> Mark as Verified Instead
@@ -631,11 +692,11 @@ const RegistrantRow = ({ reg, event, isPastEvent, isExpanded, onToggle, onToggle
                     )}
 
                     {/* Mobile cert button */}
-                    {event.hasCertificate && isPastEvent && (
-                        <button onClick={() => onIssueCert(reg._id, !reg.certificateIssued)} className="sm:hidden w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors"
-                            style={{ background: reg.certificateIssued ? '#fef3c7' : '#4f46e5', color: reg.certificateIssued ? '#92400e' : 'white' }}>
+                    {hasCert && isPastEvent && (
+                        <button onClick={() => onIssueCert(regId, !certIssued)} className="sm:hidden w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+                            style={{ background: certIssued ? '#fef3c7' : '#4f46e5', color: certIssued ? '#92400e' : 'white' }}>
                             <Award className="w-4 h-4" />
-                            {reg.certificateIssued ? 'Certificate Issued — Click to Revoke' : 'Issue Certificate'}
+                            {certIssued ? 'Certificate Issued — Click to Revoke' : 'Issue Certificate'}
                         </button>
                     )}
                 </div>

@@ -15,7 +15,13 @@ import {
     Building2,
     X,
 } from 'lucide-react';
-import api from '../../api/axios.js';
+import {
+    getMyAchievements,
+    submitAchievement,
+    uploadProofFile,
+    getProofFileUrl,
+} from '../../lib/api/achievements.js';
+import useAuth from '../../hooks/useAuth.js';
 import { formatDate } from '../../utils/formatDate.js';
 import { cn } from '../../lib/utils.js';
 
@@ -33,6 +39,7 @@ const achievementSchema = z.object({
 });
 
 const Achievements = () => {
+    const { user } = useAuth();
     const [achievements, setAchievements] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,8 +62,8 @@ const Achievements = () => {
     const fetchAchievements = async () => {
         setLoading(true);
         try {
-            const res = await api.get('/achievements/my');
-            setAchievements(res.data.data);
+            const data = await getMyAchievements();
+            setAchievements(data || []);
         } catch (err) {
             toast.error('Failed to load achievements');
         } finally {
@@ -67,6 +74,23 @@ const Achievements = () => {
     useEffect(() => {
         fetchAchievements();
     }, []);
+
+    const handleViewProof = async (proofUrl) => {
+        if (!proofUrl) {
+            toast.error('No proof file available');
+            return;
+        }
+        if (proofUrl.startsWith('http://') || proofUrl.startsWith('https://')) {
+            window.open(proofUrl, '_blank');
+            return;
+        }
+        try {
+            const signedUrl = await getProofFileUrl(proofUrl);
+            window.open(signedUrl, '_blank');
+        } catch {
+            toast.error('Failed to load proof file');
+        }
+    };
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
@@ -104,17 +128,16 @@ const Achievements = () => {
         }
 
         setIsSubmitting(true);
-        const formData = new FormData();
-        formData.append('title', data.title);
-        formData.append('type', data.type);
-        formData.append('issuingOrganization', data.issuingOrganization);
-        formData.append('completionDate', data.completionDate);
-        if (data.description) formData.append('description', data.description);
-        formData.append('proof', selectedFile);
-
         try {
-            await api.post('/achievements', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
+            const proofInfo = await uploadProofFile(user.id, selectedFile);
+            await submitAchievement({
+                title: data.title,
+                type: data.type,
+                issuing_organization: data.issuingOrganization,
+                completion_date: data.completionDate,
+                description: data.description || null,
+                proof_file_url: proofInfo.path,
+                proof_file_name: proofInfo.name,
             });
             toast.success('Achievement submitted successfully!');
             reset();
@@ -122,7 +145,7 @@ const Achievements = () => {
             setShowForm(false);
             fetchAchievements();
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Submission failed');
+            toast.error(err.message || 'Submission failed');
         } finally {
             setIsSubmitting(false);
         }
@@ -350,7 +373,11 @@ const Achievements = () => {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {achievements.map((a) => (
-                        <AchievementCard key={a._id} achievement={a} />
+                        <AchievementCard
+                            key={a.id || a._id}
+                            achievement={a}
+                            onViewProof={handleViewProof}
+                        />
                     ))}
                 </div>
             )}
@@ -358,7 +385,13 @@ const Achievements = () => {
     );
 };
 
-const AchievementCard = ({ achievement }) => {
+const AchievementCard = ({ achievement, onViewProof }) => {
+    const proofUrl = achievement.proof_file_url || achievement.proofFileUrl;
+    const issuingOrg = achievement.issuing_organization || achievement.issuingOrganization;
+    const compDate = achievement.completion_date || achievement.completionDate;
+    const createdAt = achievement.created_at || achievement.createdAt;
+    const rejectionReason = achievement.rejection_reason || achievement.rejectionReason;
+
     return (
         <div className="bg-white dark:bg-gray-900 border dark:border-gray-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
             
@@ -391,34 +424,35 @@ const AchievementCard = ({ achievement }) => {
             <div className="space-y-2 mb-5">
                 <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                     <Building2 className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                    <span className="truncate">{achievement.issuingOrganization}</span>
+                    <span className="truncate">{issuingOrg}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                     <Calendar className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                    <span>Completed {formatDate(achievement.completionDate)}</span>
+                    <span>Completed {formatDate(compDate)}</span>
                 </div>
             </div>
 
             <div className="pt-4 border-t dark:border-gray-800 flex items-center justify-between">
                 <p className="text-xs text-gray-500">
-                    Submitted {formatDate(achievement.createdAt)}
+                    Submitted {formatDate(createdAt)}
                 </p>
-                <a
-                    href={achievement.proofFileUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
-                >
-                    <FileText className="w-3.5 h-3.5" />
-                    View Proof
-                </a>
+                {proofUrl && (
+                    <button
+                        type="button"
+                        onClick={() => onViewProof(proofUrl)}
+                        className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                    >
+                        <FileText className="w-3.5 h-3.5" />
+                        View Proof
+                    </button>
+                )}
             </div>
 
             {/* Rejection Note */}
-            {achievement.status === 'rejected' && achievement.rejectionReason && (
+            {achievement.status === 'rejected' && rejectionReason && (
                 <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-lg">
                     <p className="text-xs text-red-600 dark:text-red-400 font-medium">Rejection Reason:</p>
-                    <p className="text-xs text-red-500 dark:text-red-300 mt-0.5">{achievement.rejectionReason}</p>
+                    <p className="text-xs text-red-500 dark:text-red-300 mt-0.5">{rejectionReason}</p>
                 </div>
             )}
         </div>

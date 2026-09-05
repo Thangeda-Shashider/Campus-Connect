@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../../api/axios.js';
+import { checkInByQrToken } from '../../lib/api/registrations.js';
 import QRScanner from '../../components/QRScanner.jsx';
 import { cn } from '../../lib/utils.js';
 
 const CheckIn = () => {
     const { eventId } = useParams();
-    const [result, setResult] = useState(null); // { success, name, error }
+    const [result, setResult] = useState(null); // { success, name, dept, error }
     const [processing, setProcessing] = useState(false);
     const [scanning, setScanning] = useState(true);
 
@@ -18,15 +18,19 @@ const CheckIn = () => {
         setScanning(false);
 
         try {
-            const res = await api.post('/registrations/checkin', { qrToken });
-            if (res.data.success) {
-                const reg = res.data.data;
-                setResult({ success: true, name: reg.user?.name, dept: reg.user?.department });
-                toast.success(`✓ Checked in: ${reg.user?.name}`);
+            const reg = await checkInByQrToken(qrToken);
+            if (eventId && reg.event_id && reg.event_id !== eventId) {
+                throw new Error('This ticket belongs to a different event');
             }
+            const profile = reg.profiles || reg.profile || reg.user;
+            const name = profile?.name || 'Student';
+            const dept = profile?.department || profile?.roll_no || '';
+            setResult({ success: true, name, dept });
+            toast.success(`✓ Checked in: ${name}`);
         } catch (err) {
-            setResult({ success: false, error: err.response?.data?.error || 'Invalid QR code' });
-            toast.error(err.response?.data?.error || 'Invalid QR code');
+            const errorMsg = err.message || 'Invalid or expired QR code';
+            setResult({ success: false, error: errorMsg });
+            toast.error(errorMsg);
         } finally {
             setProcessing(false);
         }

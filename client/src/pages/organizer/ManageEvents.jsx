@@ -6,7 +6,10 @@ import {
     LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import api from '../../api/axios.js';
+import { supabase } from '../../lib/supabase.js';
+import { deleteEvent } from '../../lib/api/events.js';
+import { getEventRegistrants, exportRegistrantsCsv } from '../../lib/api/registrations.js';
+import useAuth from '../../hooks/useAuth.js';
 import { formatDate } from '../../utils/formatDate.js';
 import { cn } from '../../lib/utils.js';
 
@@ -20,42 +23,96 @@ const STATUS_COLORS = {
 const PIE_COLORS = ['#4F46E5', '#E5E7EB'];
 
 const ManageEvents = () => {
+    const { user } = useAuth();
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({ perDay: [], perDept: [], attendance: [] });
     const navigate = useNavigate();
 
     const load = async () => {
+        if (!user?.id) return;
         setLoading(true);
         try {
-            const [eventsRes, statsRes] = await Promise.all([
-                api.get('/events/my/events'),
-                api.get('/events/my/stats'),
-            ]);
-            setEvents(eventsRes.data.data);
-            setStats(statsRes.data.data);
-        } catch {
+            const { data, error } = await supabase
+                .from('events')
+                .select('*, registrations(id, attended, registered_at, profiles(department))')
+                .eq('organizer_id', user.id)
+                .order('date', { ascending: false });
+
+            if (error) throw error;
+
+            const eventList = data || [];
+            setEvents(eventList);
+
+            // Compute analytics
+            const daysMap = {};
+            for (let i = 6; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                const key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                daysMap[key] = 0;
+            }
+
+            let totalAttended = 0;
+            let totalRegistrations = 0;
+            const deptMap = {};
+
+            eventList.forEach((ev) => {
+                (ev.registrations || []).forEach((reg) => {
+                    totalRegistrations++;
+                    if (reg.attended) totalAttended++;
+
+                    if (reg.registered_at) {
+                        const regDay = new Date(reg.registered_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        if (daysMap[regDay] !== undefined) {
+                            daysMap[regDay]++;
+                        }
+                    }
+
+                    const dept = reg.profiles?.department || 'Other';
+                    deptMap[dept] = (deptMap[dept] || 0) + 1;
+                });
+            });
+
+            const perDay = Object.entries(daysMap).map(([day, registrations]) => ({ day, registrations }));
+            const attendanceRate = totalRegistrations > 0 ? Math.round((totalAttended / totalRegistrations) * 100) : 0;
+            const attendance = totalRegistrations > 0 ? [
+                { name: 'Attended', value: attendanceRate },
+                { name: 'Absent', value: 100 - attendanceRate },
+            ] : [];
+            const perDept = Object.entries(deptMap).map(([dept, count]) => ({ dept, count }));
+
+            setStats({ perDay, attendance, perDept });
+        } catch (err) {
             toast.error('Failed to load events');
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => {
+        load();
+    }, [user?.id]);
 
     const handleDelete = async (id) => {
         if (!window.confirm('Delete this event?')) return;
         try {
-            await api.delete(`/events/${id}`);
+            await deleteEvent(id);
             toast.success('Event deleted');
-            setEvents((e) => e.filter((ev) => ev._id !== id));
+            setEvents((e) => e.filter((ev) => (ev.id || ev._id) !== id));
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Delete failed');
+            toast.error(err.message || 'Delete failed');
         }
     };
 
-    const handleExport = (id) => {
-        window.open(`${import.meta.env.VITE_API_BASE_URL}/registrations/event/${id}/export`, '_blank');
+    const handleExport = async (ev) => {
+        try {
+            const registrants = await getEventRegistrants(ev.id || ev._id);
+            exportRegistrantsCsv(registrants, ev.title);
+            toast.success('Registrants exported successfully');
+        } catch (err) {
+            toast.error('Failed to export registrants');
+        }
     };
 
     return (
@@ -99,42 +156,46 @@ const ManageEvents = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {events.map((ev) => (
-                                    <tr key={ev._id} className="border-b dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
-                                        <td className="px-5 py-4 font-medium text-gray-900 dark:text-white max-w-xs truncate">{ev.title}</td>
-                                        <td className="px-5 py-4 text-gray-600 dark:text-gray-400">{formatDate(ev.date)}</td>
-                                        <td className="px-5 py-4">
-                                            <Link
-                                                to={`/organizer/manage/${ev._id}`}
-                                                className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline"
-                                            >
-                                                <Users className="w-4 h-4" />
-                                                {ev.registrationCount ?? 0}
-                                            </Link>
-                                        </td>
-                                        <td className="px-5 py-4">
-                                            <span className={cn('text-xs font-medium px-2.5 py-1 rounded-full capitalize', STATUS_COLORS[ev.status] ?? '')}>
-                                                {ev.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-5 py-4">
-                                            <div className="flex items-center gap-2">
-                                                <Link to={`/organizer/edit/${ev._id}`} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition-colors" title="Edit">
-                                                    <Pencil className="w-4 h-4" />
+                                {events.map((ev) => {
+                                    const eventId = ev.id || ev._id;
+                                    const regCount = ev.registrations ? ev.registrations.length : (ev.registrationCount ?? 0);
+                                    return (
+                                        <tr key={eventId} className="border-b dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                                            <td className="px-5 py-4 font-medium text-gray-900 dark:text-white max-w-xs truncate">{ev.title}</td>
+                                            <td className="px-5 py-4 text-gray-600 dark:text-gray-400">{formatDate(ev.date)}</td>
+                                            <td className="px-5 py-4">
+                                                <Link
+                                                    to={`/organizer/manage/${eventId}`}
+                                                    className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline"
+                                                >
+                                                    <Users className="w-4 h-4" />
+                                                    {regCount}
                                                 </Link>
-                                                <Link to={`/organizer/checkin/${ev._id}`} className="p-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-500 transition-colors" title="Check-in">
-                                                    <QrCode className="w-4 h-4" />
-                                                </Link>
-                                                <button onClick={() => handleExport(ev._id)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition-colors" title="Export CSV">
-                                                    <Download className="w-4 h-4" />
-                                                </button>
-                                                <button onClick={() => handleDelete(ev._id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 transition-colors" title="Delete">
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                            </td>
+                                            <td className="px-5 py-4">
+                                                <span className={cn('text-xs font-medium px-2.5 py-1 rounded-full capitalize', STATUS_COLORS[ev.status] ?? '')}>
+                                                    {ev.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-5 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <Link to={`/organizer/edit/${eventId}`} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition-colors" title="Edit">
+                                                        <Pencil className="w-4 h-4" />
+                                                    </Link>
+                                                    <Link to={`/organizer/checkin/${eventId}`} className="p-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-500 transition-colors" title="Check-in">
+                                                        <QrCode className="w-4 h-4" />
+                                                    </Link>
+                                                    <button onClick={() => handleExport(ev)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition-colors" title="Export CSV">
+                                                        <Download className="w-4 h-4" />
+                                                    </button>
+                                                    <button onClick={() => handleDelete(eventId)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 transition-colors" title="Delete">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -149,7 +210,7 @@ const ManageEvents = () => {
                         Analytics
                     </h2>
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* Line chart – registrations per day (placeholder data) */}
+                        {/* Line chart – registrations per day */}
                         <div className="lg:col-span-2 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
                             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">Registrations (last 7 days)</h3>
                             <ResponsiveContainer width="100%" height={200}>

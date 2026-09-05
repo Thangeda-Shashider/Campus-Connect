@@ -1,19 +1,21 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import api from '../../api/axios.js';
+import { getEventById, updateEvent, uploadEventBanner, uploadPaymentQr } from '../../lib/api/events.js';
+import useAuth from '../../hooks/useAuth.js';
 import EventForm from '../../components/EventForm.jsx';
 
 const EditEvent = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [event, setEvent] = useState(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        api.get(`/events/${id}`)
-            .then((res) => setEvent(res.data.data))
+        getEventById(id)
+            .then((data) => setEvent(data))
             .catch(() => toast.error('Failed to load event'))
             .finally(() => setLoading(false));
     }, [id]);
@@ -21,15 +23,45 @@ const EditEvent = () => {
     const handleSubmit = async (formData) => {
         setSaving(true);
         try {
-            const res = await api.put(`/events/${id}`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
-            if (res.data.success) {
-                toast.success('Event updated!');
-                navigate('/organizer/manage');
+            const bannerFile = formData.get('banner');
+            let bannerUrl = event?.banner_url;
+            if (bannerFile && bannerFile.size > 0) {
+                bannerUrl = await uploadEventBanner(user.id, bannerFile);
             }
+
+            const paymentQrFile = formData.get('paymentQr');
+            let paymentQrUrl = event?.payment_qr_url;
+            if (paymentQrFile && paymentQrFile.size > 0) {
+                paymentQrUrl = await uploadPaymentQr(user.id, paymentQrFile);
+            }
+
+            const maxSeatsVal = formData.get('maxSeats');
+            const paymentAmountVal = formData.get('paymentAmount');
+            const tags = formData.getAll('tags');
+
+            const updates = {
+                title: formData.get('title'),
+                description: formData.get('description'),
+                category: formData.get('category'),
+                venue: formData.get('venue'),
+                date: formData.get('date'),
+                registration_deadline: formData.get('registrationDeadline'),
+                max_seats: maxSeatsVal ? parseInt(maxSeatsVal, 10) : null,
+                tags: tags.length > 0 ? tags : [],
+                has_certificate: formData.get('hasCertificate') === 'true',
+                payment_required: formData.get('paymentRequired') === 'true',
+                payment_amount: paymentAmountVal ? parseFloat(paymentAmountVal) : 0,
+                registration_form_fields: JSON.parse(formData.get('registrationFormFields') || '[]'),
+            };
+
+            if (bannerUrl !== undefined) updates.banner_url = bannerUrl;
+            if (paymentQrUrl !== undefined) updates.payment_qr_url = paymentQrUrl;
+
+            await updateEvent(id, updates);
+            toast.success('Event updated!');
+            navigate('/organizer/manage');
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Update failed');
+            toast.error(err.message || 'Update failed');
         } finally {
             setSaving(false);
         }
