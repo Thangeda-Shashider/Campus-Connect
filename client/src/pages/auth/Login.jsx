@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../../api/axios.js';
 import useAuth from '../../hooks/useAuth.js';
 import { cn } from '../../lib/utils.js';
 import { useState } from 'react';
@@ -30,16 +29,14 @@ const Login = () => {
     const onSubmit = async (data) => {
         setIsLoading(true);
         try {
-            const res = await api.post('/auth/login', data);
-            if (res.data.success) {
-                login(res.data.data);
-                toast.success(`Welcome back, ${res.data.data.name}!`);
-                const role = res.data.data.role;
-                const dest = role === 'admin' ? '/admin' : role === 'organizer' ? '/organizer/manage' : '/dashboard';
-                navigate(dest, { replace: true });
-            }
+            const user = await login(data);
+            toast.success(`Welcome back, ${user.name}!`);
+            const roleDest =
+                user.role === 'admin' ? '/admin' : user.role === 'organizer' ? '/organizer/manage' : '/dashboard';
+            const dest = from && from !== '/' && from !== '/login' ? from : roleDest;
+            navigate(dest, { replace: true });
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Login failed');
+            toast.error(err.message || 'Login failed');
         } finally {
             setIsLoading(false);
         }

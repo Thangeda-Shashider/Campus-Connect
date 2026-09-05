@@ -2,7 +2,6 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, Menu, X, Sun, Moon, CalendarDays, ChevronDown } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import useAuth from '../hooks/useAuth.js';
-import api from '../api/axios.js';
 import toast from 'react-hot-toast';
 import { cn } from '../lib/utils.js';
 
@@ -32,12 +31,11 @@ const Navbar = () => {
 
     const handleLogout = async () => {
         try {
-            await api.post('/auth/logout');
-            logout();
+            await logout();
             navigate('/login');
             toast.success('Logged out successfully');
-        } catch {
-            logout();
+        } catch (err) {
+            toast.error(err.message || 'Logout failed');
             navigate('/login');
         }
     };

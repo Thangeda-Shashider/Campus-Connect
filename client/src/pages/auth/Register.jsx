@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../../api/axios.js';
 import useAuth from '../../hooks/useAuth.js';
 import { cn } from '../../lib/utils.js';
 import { useState } from 'react';
@@ -26,7 +25,7 @@ const schema = z
     });
 
 const Register = () => {
-    const { login } = useAuth();
+    const { signup } = useAuth();
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(false);
 
@@ -39,16 +38,17 @@ const Register = () => {
     const onSubmit = async (data) => {
         setIsLoading(true);
         try {
-            const { confirmPassword, ...payload } = data;
-            const res = await api.post('/auth/register', payload);
-            if (res.data.success) {
-                login(res.data.data);
-                toast.success('Account created! Welcome to CampusConnect 🎉');
-                const role = res.data.data.role;
-                navigate(role === 'organizer' ? '/organizer/manage' : '/dashboard');
+            const { confirmPassword: _confirmPassword, ...payload } = data;
+            const { user, needsEmailConfirmation } = await signup(payload);
+            if (needsEmailConfirmation) {
+                toast.success('Account created. Confirm your email, then sign in.');
+                navigate('/login');
+                return;
             }
+            toast.success('Account created! Welcome to CampusConnect 🎉');
+            navigate(user.role === 'organizer' ? '/organizer/manage' : '/dashboard');
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Registration failed');
+            toast.error(err.message || 'Registration failed');
         } finally {
             setIsLoading(false);
         }
