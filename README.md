@@ -1,129 +1,136 @@
 # CampusConnect
 
-A full-stack MERN campus event and communication hub — replacing fragmented WhatsApp groups, notice boards, and manual sign-up forms.
+A campus event and achievement management hub built for CSE departments — replacing fragmented WhatsApp groups, physical notice boards, and manual sign-up sheets with one centralised platform.
+
+> **Stack:** React (Vite SPA) + Supabase — no Express server, no MongoDB.
+
+---
 
 ## Tech Stack
 
 | Layer | Tech |
 |---|---|
-| Frontend | React + Vite, Tailwind CSS, shadcn/ui, Zustand, React Router v6, Recharts |
-| Backend | Node.js, Express, Mongoose, JWT (httpOnly cookie) |
-| Database | MongoDB Atlas |
-| Auth | bcryptjs + JWT |
-| Email | Nodemailer (SMTP) |
-| QR | `qrcode` (server), `qrcode.react` (client), `html5-qrcode` (scanner) |
-| Jobs | node-cron |
+| Frontend | React 18 + Vite, Tailwind CSS v4, shadcn/ui (Radix), Zustand, React Router v6, Recharts |
+| Backend-as-a-Service | [Supabase](https://supabase.com) (PostgreSQL + Auth + Storage + RLS) |
+| Auth | Supabase Auth (email/password, session in localStorage) |
+| Database | PostgreSQL via Supabase — relational schema with foreign keys |
+| Storage | Supabase Storage — event banners, UPI QR codes, payment screenshots, achievement proofs |
+| Forms | React Hook Form + Zod |
+| QR Scan | `html5-qrcode` (camera-based scanner in browser) |
+| Deployment | Vercel (frontend) — no server to host |
+
+---
 
 ## Getting Started
 
 ### Prerequisites
 - Node.js ≥ 18
-- A MongoDB Atlas cluster (free tier works)
-- An SMTP email provider (Gmail app password or Mailtrap for dev)
+- A free [Supabase](https://supabase.com) project
 
 ### 1. Clone & Install
 
 ```bash
-# Install server deps
-cd server && npm install
-
-# Install client deps
+# Install frontend dependencies
 cd client && npm install
 ```
 
-### 2. Configure Environment Variables
+That's it — there is no server to install.
 
-**`server/.env`** — fill in your real values:
+### 2. Set up Supabase
+
+1. Go to your Supabase project → **SQL Editor** → run the full schema from [`supabase/schema.sql`](./supabase/schema.sql)
+   - Creates tables: `profiles`, `events`, `registrations`, `achievements`
+   - Creates RLS policies, the `handle_new_user` trigger, and storage bucket policies
+2. Go to **Storage → Buckets** and create the following:
+
+| Bucket | Public? | Used for |
+|---|---|---|
+| `event-banners` | ✅ Public | Event banner images |
+| `payment-qr` | ✅ Public | UPI QR codes shown to students |
+| `payment-screenshots` | ❌ Private | Student payment proof uploads |
+| `achievement-proofs` | ❌ Private | Student certification/workshop proofs |
+
+3. Copy your project URL and anon key from **Project Settings → API**
+
+### 3. Configure Environment Variables
+
+Create `client/.env` (never commit this file — it is already in `.gitignore`):
+
 ```env
-PORT=5000
-MONGO_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/campusconnect
-JWT_SECRET=a-long-random-secret
-CLIENT_URL=http://localhost:5173
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your@gmail.com
-SMTP_PASS=your-app-password
-EMAIL_FROM=noreply@campusconnect.app
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-**`client/.env`**:
-```env
-VITE_API_BASE_URL=http://localhost:5000/api
-```
+> ⚠️ Only the **anon/publishable** key goes here — never the `service_role` secret.  
+> Security is enforced by **Row Level Security (RLS)** policies in PostgreSQL, not by hiding the anon key.
 
-### 3. Run
-
-Open two terminals:
+### 4. Run
 
 ```bash
-# Terminal 1 — Backend
-cd server && npm run dev
-
-# Terminal 2 — Frontend
+# From project root
+npm run dev
+# or
 cd client && npm run dev
 ```
 
-- Backend → http://localhost:5000
-- Frontend → http://localhost:5173
+App runs at → **http://localhost:5173**
+
+---
 
 ## User Roles
 
-| Role | Default |Access |
+| Role | How to set | Access |
 |---|---|---|
-| `student` | ✓ | Browse events, register, view QR, dashboard |
-| `organizer` | — | Create/edit/delete events, check-in, export CSV |
-| `admin` | — | All of the above + user management + platform stats |
+| `student` | Default on signup | Browse events, register, view QR ticket, upload achievements |
+| `organizer` | Admin sets via Manage Users page | All of the above + create/edit events, QR check-in, export CSV, verify payments |
+| `admin` | Set directly in Supabase `profiles` table (first time) | Everything + user management + platform-wide stats + achievement review |
 
-> To make a user an admin, update their `role` field directly in MongoDB, or use the Admin panel once you have one admin account.
-
-## API Overview
-
-| Group | Base Path | Auth |
-|---|---|---|
-| Auth | `/api/auth` | Public / Cookie |
-| Events | `/api/events` | Public + Organizer |
-| Registrations | `/api/registrations` | Student + Organizer |
-| Admin | `/api/admin` | Admin only |
-
-Full route details are in `server/routes/`.
+---
 
 ## Key Features
 
-- **JWT via httpOnly cookie** — authentication without localStorage vulnerabilities
-- **QR check-in** — camera-based scanner marks attendance in real time
-- **Email notifications** — registration confirmation with QR attachment, 24h reminders, weekly digest
-- **Recharts analytics** — line, bar, and donut charts on the organizer dashboard
-- **Dark mode** — toggled via `document.documentElement.classList`
-- **CSV export** — one-click download of registrant data per event
+- **No backend server** — React talks directly to Supabase via the JS SDK. No Render cold starts, no CORS config.
+- **RLS-enforced security** — Access control lives in PostgreSQL RLS policies, not middleware.
+- **Supabase Auth** — Email/password login, session auto-refresh, no custom JWT code.
+- **QR check-in** — Camera-based scanner (`html5-qrcode`) marks attendance in real time.
+- **Manual UPI payments** — Organiser uploads QR image; student pays and uploads screenshot; organiser verifies.
+- **Achievement tracker** — Students upload monthly certification/workshop proofs; admin reviews and approves/rejects.
+- **CSV export** — Client-side CSV generation (no server endpoint needed).
+- **Recharts analytics** — Bar, line, and donut charts on the organiser dashboard.
+- **Dark mode** — Toggled via `document.documentElement.classList`.
+
+---
 
 ## Folder Structure
 
 ```
 CampusConnect/
-├── client/          # React + Vite frontend
+├── client/                  # React + Vite SPA (the entire app)
 │   └── src/
-│       ├── api/     # Axios instance
-│       ├── components/
-│       ├── hooks/
-│       ├── pages/   # auth | student | organizer | admin
-│       ├── store/   # Zustand auth
-│       └── utils/
-└── server/          # Node.js + Express backend
-    ├── config/
-    ├── constants/
-    ├── controllers/
-    ├── jobs/
-    ├── middleware/
-    ├── models/
-    ├── routes/
-    └── utils/
+│       ├── lib/
+│       │   ├── supabase.js  # Supabase client singleton
+│       │   ├── constants.js # Shared enums (ROLES, CATEGORIES, etc.)
+│       │   └── api/         # One file per domain — wraps Supabase queries
+│       │       ├── auth.js
+│       │       ├── events.js
+│       │       ├── registrations.js
+│       │       ├── achievements.js
+│       │       └── admin.js
+│       ├── components/      # Shared/reusable UI components
+│       ├── hooks/           # Custom React hooks
+│       ├── pages/
+│       │   ├── auth/        # Login, Register
+│       │   ├── student/     # Dashboard, EventList, EventDetail
+│       │   ├── organizer/   # ManageEvents, CreateEvent, EditEvent, CheckIn, OrganizerRegistrants
+│       │   └── admin/       # AdminDashboard, ManageUsers
+│       ├── store/           # Zustand — authStore.js only
+│       └── utils/           # Pure helpers (CSV export, date formatting)
+├── supabase/
+│   └── schema.sql           # Full PostgreSQL schema — run this in Supabase SQL Editor
+└── .ai/                     # AI agent context files (not shipped to production)
 ```
 
-## Wiring Up Cloudinary (later)
-
-1. Create a free Cloudinary account
-2. Add `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` to `server/.env`
-3. Replace the stub in `server/config/cloudinary.js` with the real `cloudinary-multer-storage` uploader
+---
 
 ## License
 
