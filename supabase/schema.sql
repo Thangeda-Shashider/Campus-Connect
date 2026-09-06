@@ -10,6 +10,8 @@ create table if not exists public.profiles (
   role text not null default 'student' check (role in ('student', 'organizer', 'admin')),
   department text,
   year int check (year between 1 and 6),
+  phone text,
+  bio text,
   interests text[],
   avatar_url text,
   created_at timestamptz default now()
