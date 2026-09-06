@@ -1,23 +1,32 @@
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Upload, Plus, Trash2, Award, CreditCard, FileText, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
+import { 
+    Upload, Plus, Trash2, Award, CreditCard, FileText, 
+    ChevronDown, ChevronUp, GripVertical, Eye, Copy, 
+    Sparkles, CheckSquare, ListFilter, AlignLeft 
+} from 'lucide-react';
 import { cn } from '../lib/utils.js';
 import { toInputDatetime } from '../utils/formatDate.js';
 import { useState } from 'react';
 
 const CATEGORIES = ['Hackathon', 'Workshop', 'Seminar', 'Cultural', 'Sports'];
 const FIELD_TYPES = [
-    { value: 'text', label: 'Short Text' },
-    { value: 'email', label: 'Email Address' },
+    { value: 'text', label: 'Short Answer' },
+    { value: 'textarea', label: 'Paragraph' },
+    { value: 'select', label: 'Dropdown (Options)' },
+    { value: 'checkbox', label: 'Checkbox (Confirm / Opt-in)' },
     { value: 'number', label: 'Number' },
-    { value: 'phone', label: 'Phone Number' },
+    { value: 'email', label: 'Email' },
+    { value: 'phone', label: 'Phone' },
 ];
 
 const formFieldSchema = z.object({
     label: z.string().min(1, 'Field label is required'),
-    type: z.enum(['text', 'email', 'number', 'phone']),
+    type: z.enum(['text', 'textarea', 'select', 'checkbox', 'number', 'email', 'phone']),
     required: z.boolean().default(false),
+    placeholder: z.string().optional(),
+    options: z.string().optional(),
 });
 
 const eventSchema = z.object({
@@ -66,10 +75,22 @@ const EventForm = ({ defaultValues, onSubmit, isLoading = false }) => {
         },
     });
 
-    const { fields, append, remove } = useFieldArray({
+    const { fields, append, remove, move } = useFieldArray({
         control,
         name: 'registrationFormFields',
     });
+
+    const [formTab, setFormTab] = useState('builder'); // 'builder' | 'preview'
+    const watchedFormFields = watch('registrationFormFields') || [];
+
+    const QUICK_TEMPLATES = [
+        { label: 'Team Name', type: 'text', placeholder: 'Enter your team name (or Solo)', required: false, options: '' },
+        { label: 'GitHub / Project URL', type: 'text', placeholder: 'https://github.com/username/project', required: false, options: '' },
+        { label: 'T-Shirt Size', type: 'select', placeholder: 'Select size', options: 'XS, S, M, L, XL, XXL', required: false },
+        { label: 'Dietary Preference', type: 'select', placeholder: 'Select food preference', options: 'Vegetarian, Non-Vegetarian, Jain, Vegan', required: false },
+        { label: 'Do you need a laptop charging desk?', type: 'checkbox', placeholder: 'Check if you need a power socket at desk', required: false, options: '' },
+        { label: 'Project Abstract / Idea', type: 'textarea', placeholder: 'Brief summary of what you plan to build or present (2-3 sentences)', required: false, options: '' },
+    ];
 
     const paymentRequired = watch('paymentRequired');
 
@@ -108,8 +129,25 @@ const EventForm = ({ defaultValues, onSubmit, isLoading = false }) => {
         );
 
     const addField = () => {
-        append({ label: '', type: 'text', required: false });
+        append({ label: '', type: 'text', required: false, placeholder: '', options: '' });
         setShowFormBuilder(true);
+    };
+
+    const addTemplateField = (tmpl) => {
+        append({ ...tmpl });
+        setShowFormBuilder(true);
+    };
+
+    const duplicateField = (index) => {
+        const item = watchedFormFields[index];
+        if (!item) return;
+        append({
+            label: `${item.label || 'Question'} (Copy)`,
+            type: item.type || 'text',
+            required: item.required || false,
+            placeholder: item.placeholder || '',
+            options: item.options || '',
+        });
     };
 
     return (
@@ -300,11 +338,42 @@ const EventForm = ({ defaultValues, onSubmit, isLoading = false }) => {
                             </p>
                             {fields.length > 0 && (
                                 <span className="text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-medium">
-                                    {fields.length} field{fields.length !== 1 ? 's' : ''}
+                                    {fields.length} question{fields.length !== 1 ? 's' : ''}
                                 </span>
                             )}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2">
+                            {/* Mode Toggle: Builder vs Live Preview */}
+                            {fields.length > 0 && (
+                                <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 p-0.5 text-xs">
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormTab('builder')}
+                                        className={cn(
+                                            'px-2.5 py-1 rounded-md font-medium transition-colors',
+                                            formTab === 'builder'
+                                                ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-xs'
+                                                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                                        )}
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormTab('preview')}
+                                        className={cn(
+                                            'px-2.5 py-1 rounded-md font-medium transition-colors flex items-center gap-1',
+                                            formTab === 'preview'
+                                                ? 'bg-white dark:bg-gray-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                                                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                                        )}
+                                    >
+                                        <Eye className="w-3 h-3" />
+                                        <span>Preview</span>
+                                    </button>
+                                </div>
+                            )}
+
                             {fields.length > 0 && (
                                 <button
                                     type="button"
@@ -312,110 +381,279 @@ const EventForm = ({ defaultValues, onSubmit, isLoading = false }) => {
                                     className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
                                 >
                                     {showFormBuilder ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                                    {showFormBuilder ? 'Collapse' : 'Expand'}
                                 </button>
                             )}
                             <button
                                 type="button"
                                 onClick={addField}
-                                className="flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
+                                className="flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer"
                             >
                                 <Plus className="w-3.5 h-3.5" />
-                                Add Field
+                                Add Question
                             </button>
                         </div>
                     </div>
 
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                        Students will always be asked for Roll Number, College Email, and Phone. Add any extra fields needed for this event.
+                        Create custom questions like in Google Forms. Default student details (Roll No, Email, Phone) are pre-filled automatically.
                     </p>
 
-                    {/* Built-in fields preview */}
-                    <div className="rounded-xl border dark:border-gray-800 overflow-hidden">
-                        <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-2.5">
-                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Default Fields (always collected)</p>
+                    {/* Quick Question Templates */}
+                    <div className="bg-gray-50 dark:bg-gray-800/40 p-3 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-amber-500" />
+                            Quick Templates (Click to add):
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                            {QUICK_TEMPLATES.map((tmpl) => (
+                                <button
+                                    key={tmpl.label}
+                                    type="button"
+                                    onClick={() => addTemplateField(tmpl)}
+                                    className="text-xs px-2.5 py-1 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-indigo-500 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-gray-700 dark:text-gray-300 cursor-pointer shadow-2xs"
+                                >
+                                    + {tmpl.label}
+                                </button>
+                            ))}
                         </div>
-                        {['Roll Number', 'College Email', 'Phone Number'].map((label) => (
-                            <div key={label} className="flex items-center justify-between px-4 py-2.5 border-t dark:border-gray-800">
-                                <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
-                                <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full">Required</span>
-                            </div>
-                        ))}
                     </div>
 
-                    {/* Custom fields */}
-                    {fields.length > 0 && showFormBuilder && (
-                        <div className="space-y-3">
-                            {fields.map((field, index) => (
-                                <div
-                                    key={field.id}
-                                    className="rounded-xl border dark:border-gray-800 bg-white dark:bg-gray-900 p-4 space-y-3"
-                                >
-                                    <div className="flex items-center justify-between gap-2">
-                                        <div className="flex items-center gap-2 text-gray-400">
-                                            <GripVertical className="w-4 h-4" />
-                                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                                                Custom Field {index + 1}
-                                            </span>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => remove(index)}
-                                            className="p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 transition-colors"
-                                            title="Remove field"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                    {/* ── Tab: Live Student Preview ── */}
+                    {formTab === 'preview' && fields.length > 0 && showFormBuilder && (
+                        <div className="rounded-2xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-900 p-5 space-y-4 shadow-sm animate-in fade-in duration-150">
+                            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+                                <div>
+                                    <h4 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                        <Eye className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                                        Student Registration Preview
+                                    </h4>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        This is how your registration form will look to students.
+                                    </p>
+                                </div>
+                                <span className="text-[11px] bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-medium">
+                                    Interactive Demo
+                                </span>
+                            </div>
+
+                            {/* Standard prefilled card */}
+                            <div className="bg-gray-50 dark:bg-gray-800/40 p-3 rounded-xl border border-gray-200 dark:border-gray-800 space-y-1">
+                                <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase">Default Profile Details (Auto-filled)</span>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-gray-600 dark:text-gray-300 pt-1">
+                                    <div className="p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <span className="text-gray-400 block text-[10px]">Roll Number</span>
+                                        <span className="font-mono font-medium">21CS001</span>
                                     </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <Field
-                                            label="Field Label"
-                                            error={errors.registrationFormFields?.[index]?.label}
-                                        >
-                                            <input
-                                                {...register(`registrationFormFields.${index}.label`)}
-                                                className={inputClass(errors.registrationFormFields?.[index]?.label)}
-                                                placeholder="e.g. Team Name, Project Title..."
-                                            />
-                                        </Field>
-
-                                        <Field label="Input Type">
-                                            <select
-                                                {...register(`registrationFormFields.${index}.type`)}
-                                                className={inputClass(false)}
-                                            >
-                                                {FIELD_TYPES.map((t) => (
-                                                    <option key={t.value} value={t.value}>{t.label}</option>
-                                                ))}
-                                            </select>
-                                        </Field>
+                                    <div className="p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <span className="text-gray-400 block text-[10px]">College Email</span>
+                                        <span className="font-medium truncate block">student@college.edu</span>
                                     </div>
-
-                                    <div className="flex items-center gap-2">
-                                        <Controller
-                                            control={control}
-                                            name={`registrationFormFields.${index}.required`}
-                                            render={({ field: f }) => (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => f.onChange(!f.value)}
-                                                    className={cn(
-                                                        'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                                                        f.value ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'
-                                                    )}
-                                                >
-                                                    <span className={cn(
-                                                        'inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform',
-                                                        f.value ? 'translate-x-4' : 'translate-x-0.5'
-                                                    )} />
-                                                </button>
-                                            )}
-                                        />
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Required field</span>
+                                    <div className="p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <span className="text-gray-400 block text-[10px]">Phone</span>
+                                        <span className="font-medium">9876543210</span>
                                     </div>
                                 </div>
-                            ))}
+                            </div>
+
+                            {/* Custom questions preview */}
+                            <div className="space-y-3 pt-2">
+                                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                                    Custom Questions ({watchedFormFields.length})
+                                </span>
+                                {watchedFormFields.map((field, idx) => {
+                                    const opts = field.options ? field.options.split(',').map(s => s.trim()).filter(Boolean) : [];
+                                    return (
+                                        <div key={idx} className="p-3.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 space-y-1.5">
+                                            <label className="block text-xs font-semibold text-gray-800 dark:text-gray-200">
+                                                {field.label || `Question ${idx + 1}`}
+                                                {field.required && <span className="text-red-500 ml-1">*</span>}
+                                            </label>
+
+                                            {field.type === 'textarea' ? (
+                                                <textarea
+                                                    rows={2}
+                                                    readOnly
+                                                    placeholder={field.placeholder || 'Paragraph answer text...'}
+                                                    className="w-full text-xs p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 cursor-not-allowed resize-none"
+                                                />
+                                            ) : field.type === 'select' ? (
+                                                <select
+                                                    disabled
+                                                    className="w-full text-xs p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 cursor-not-allowed"
+                                                >
+                                                    <option>-- {field.placeholder || 'Choose an option'} --</option>
+                                                    {opts.map((o, oIdx) => (
+                                                        <option key={oIdx}>{o}</option>
+                                                    ))}
+                                                </select>
+                                            ) : field.type === 'checkbox' ? (
+                                                <div className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                                    <input type="checkbox" disabled className="rounded text-indigo-600" />
+                                                    <span className="text-xs text-gray-700 dark:text-gray-300">
+                                                        {field.placeholder || 'Yes, I confirm'}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <input
+                                                    type={field.type === 'phone' ? 'tel' : field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
+                                                    readOnly
+                                                    placeholder={field.placeholder || `Enter ${field.label || 'answer'}`}
+                                                    className="w-full text-xs p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 cursor-not-allowed"
+                                                />
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Tab: Form Builder / Editor ── */}
+                    {formTab === 'builder' && fields.length > 0 && showFormBuilder && (
+                        <div className="space-y-3">
+                            {fields.map((field, index) => {
+                                const currentType = watchedFormFields[index]?.type;
+                                return (
+                                    <div
+                                        key={field.id}
+                                        className="rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-900 p-4 space-y-3.5 shadow-2xs transition-shadow hover:shadow-md"
+                                    >
+                                        {/* Top Header: Question order & controls */}
+                                        <div className="flex items-center justify-between gap-2 pb-2 border-b border-gray-100 dark:border-gray-800">
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex items-center gap-1">
+                                                    <button
+                                                        type="button"
+                                                        disabled={index === 0}
+                                                        onClick={() => move(index, index - 1)}
+                                                        className="p-1 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 cursor-pointer"
+                                                        title="Move question up"
+                                                    >
+                                                        <ChevronUp className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={index === fields.length - 1}
+                                                        onClick={() => move(index, index + 1)}
+                                                        className="p-1 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 cursor-pointer"
+                                                        title="Move question down"
+                                                    >
+                                                        <ChevronDown className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
+                                                <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-md">
+                                                    Question {index + 1}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => duplicateField(index)}
+                                                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                                    title="Duplicate question"
+                                                >
+                                                    <Copy className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => remove(index)}
+                                                    className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                    title="Delete question"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Row 1: Label and Input Type */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <div className="sm:col-span-2">
+                                                <Field
+                                                    label="Question Title / Label"
+                                                    error={errors.registrationFormFields?.[index]?.label}
+                                                >
+                                                    <input
+                                                        {...register(`registrationFormFields.${index}.label`)}
+                                                        className={inputClass(errors.registrationFormFields?.[index]?.label)}
+                                                        placeholder="e.g. GitHub Profile, Team Name, T-Shirt Size..."
+                                                    />
+                                                </Field>
+                                            </div>
+
+                                            <div>
+                                                <Field label="Question Type">
+                                                    <select
+                                                        {...register(`registrationFormFields.${index}.type`)}
+                                                        className={inputClass(false)}
+                                                    >
+                                                        {FIELD_TYPES.map((t) => (
+                                                            <option key={t.value} value={t.value}>{t.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </Field>
+                                            </div>
+                                        </div>
+
+                                        {/* If Dropdown / Select: Options list */}
+                                        {currentType === 'select' && (
+                                            <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 rounded-xl border border-indigo-100 dark:border-indigo-900/40 space-y-1">
+                                                <label className="block text-xs font-semibold text-indigo-900 dark:text-indigo-300">
+                                                    Dropdown Options (comma-separated)
+                                                </label>
+                                                <input
+                                                    {...register(`registrationFormFields.${index}.options`)}
+                                                    className={inputClass(false)}
+                                                    placeholder="Option 1, Option 2, Option 3 (e.g. S, M, L, XL)"
+                                                />
+                                                <p className="text-[11px] text-indigo-600/70 dark:text-indigo-400/70">
+                                                    Separate each choice with a comma. Students can choose one from the dropdown list.
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {/* Placeholder / Hint Text */}
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                                Placeholder / Helper Text (Optional)
+                                            </label>
+                                            <input
+                                                {...register(`registrationFormFields.${index}.placeholder`)}
+                                                className={inputClass(false)}
+                                                placeholder={currentType === 'checkbox' ? 'e.g. Yes, I accept the terms' : 'e.g. Enter team name (or Solo)...'}
+                                            />
+                                        </div>
+
+                                        {/* Bottom Controls: Required switch */}
+                                        <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-800">
+                                            <div className="flex items-center gap-2">
+                                                <Controller
+                                                    control={control}
+                                                    name={`registrationFormFields.${index}.required`}
+                                                    render={({ field: f }) => (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => f.onChange(!f.value)}
+                                                            className={cn(
+                                                                'relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer',
+                                                                f.value ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'
+                                                            )}
+                                                        >
+                                                            <span className={cn(
+                                                                'inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform',
+                                                                f.value ? 'translate-x-4' : 'translate-x-0.5'
+                                                            )} />
+                                                        </button>
+                                                    )}
+                                                />
+                                                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                                                    Required
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
                 </div>

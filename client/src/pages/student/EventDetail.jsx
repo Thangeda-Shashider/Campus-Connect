@@ -80,8 +80,15 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
         else if (!/^\d{10}$/.test(form.phone.replace(/\s/g, ''))) e.phone = 'Enter a valid 10-digit phone number';
 
         formFields.forEach((field) => {
-            if (field.required && !customForm[field.label]?.trim()) {
-                e[`custom_${field.label}`] = `"${field.label}" is required`;
+            if (field.required) {
+                const val = customForm[field.label];
+                if (field.type === 'checkbox') {
+                    if (!val || val === 'No') {
+                        e[`custom_${field.label}`] = `"${field.label}" is required`;
+                    }
+                } else if (!val || !String(val).trim()) {
+                    e[`custom_${field.label}`] = `"${field.label}" is required`;
+                }
             }
         });
 
@@ -250,17 +257,77 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
                                     <div className="border-t dark:border-gray-800 pt-2">
                                         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Additional Details</p>
                                     </div>
-                                    {formFields.map((field) => (
-                                        <FormField key={field.label} label={field.label} required={field.required} error={errors[`custom_${field.label}`]}>
-                                            <input
-                                                type={field.type === 'phone' ? 'tel' : field.type}
-                                                className={inputClass(errors[`custom_${field.label}`])}
-                                                placeholder={`Enter ${field.label.toLowerCase()}`}
-                                                value={customForm[field.label] ?? ''}
-                                                onChange={(e) => setCustomForm((f) => ({ ...f, [field.label]: e.target.value }))}
-                                            />
-                                        </FormField>
-                                    ))}
+                                    {formFields.map((field) => {
+                                        const err = errors[`custom_${field.label}`];
+                                        const opts = field.options ? (Array.isArray(field.options) ? field.options : field.options.split(',').map(s => s.trim()).filter(Boolean)) : [];
+
+                                        if (field.type === 'checkbox') {
+                                            return (
+                                                <div key={field.label} className="space-y-1">
+                                                    <label className="flex items-start gap-3 p-3 rounded-xl border dark:border-gray-700 bg-white dark:bg-gray-800/80 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={customForm[field.label] === 'Yes'}
+                                                            onChange={(e) => setCustomForm((f) => ({ ...f, [field.label]: e.target.checked ? 'Yes' : '' }))}
+                                                            className="mt-0.5 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-gray-600"
+                                                        />
+                                                        <div className="text-xs">
+                                                            <span className="font-semibold text-gray-800 dark:text-gray-200">
+                                                                {field.label} {field.required && <span className="text-red-500">*</span>}
+                                                            </span>
+                                                            {field.placeholder && (
+                                                                <p className="text-gray-500 dark:text-gray-400 mt-0.5">{field.placeholder}</p>
+                                                            )}
+                                                        </div>
+                                                    </label>
+                                                    {err && <p className="text-xs text-red-500 pl-1">{err}</p>}
+                                                </div>
+                                            );
+                                        }
+
+                                        if (field.type === 'textarea') {
+                                            return (
+                                                <FormField key={field.label} label={field.label} required={field.required} error={err}>
+                                                    <textarea
+                                                        rows={3}
+                                                        className={inputClass(err)}
+                                                        placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+                                                        value={customForm[field.label] ?? ''}
+                                                        onChange={(e) => setCustomForm((f) => ({ ...f, [field.label]: e.target.value }))}
+                                                    />
+                                                </FormField>
+                                            );
+                                        }
+
+                                        if (field.type === 'select') {
+                                            return (
+                                                <FormField key={field.label} label={field.label} required={field.required} error={err}>
+                                                    <select
+                                                        className={inputClass(err)}
+                                                        value={customForm[field.label] ?? ''}
+                                                        onChange={(e) => setCustomForm((f) => ({ ...f, [field.label]: e.target.value }))}
+                                                    >
+                                                        <option value="">-- {field.placeholder || 'Select an option'} --</option>
+                                                        {opts.map((opt) => (
+                                                            <option key={opt} value={opt}>{opt}</option>
+                                                        ))}
+                                                    </select>
+                                                </FormField>
+                                            );
+                                        }
+
+                                        return (
+                                            <FormField key={field.label} label={field.label} required={field.required} error={err}>
+                                                <input
+                                                    type={field.type === 'phone' ? 'tel' : field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
+                                                    className={inputClass(err)}
+                                                    placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+                                                    value={customForm[field.label] ?? ''}
+                                                    onChange={(e) => setCustomForm((f) => ({ ...f, [field.label]: e.target.value }))}
+                                                />
+                                            </FormField>
+                                        );
+                                    })}
                                 </>
                             )}
                         </div>
