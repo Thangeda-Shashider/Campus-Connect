@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
     Calendar, MapPin, Users, Tag, User, X, CreditCard, Award,
     AlertCircle, CheckCircle2, Upload, Image, Loader2, ShieldCheck,
-    XCircle, Clock,
+    XCircle, Clock, Maximize2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getEventById, getEventRegistrationCount } from '../../lib/api/events.js';
@@ -14,6 +14,7 @@ import {
 } from '../../lib/api/registrations.js';
 import useAuth from '../../hooks/useAuth.js';
 import QRDisplay from '../../components/QRDisplay.jsx';
+import ImageLightbox from '../../components/ImageLightbox.jsx';
 import { formatDateTime, formatRelative } from '../../utils/formatDate.js';
 import { cn } from '../../lib/utils.js';
 
@@ -465,6 +466,7 @@ const EventDetail = () => {
     const [myRegistration, setMyRegistration] = useState(null);
     const [qrToken, setQrToken] = useState(null);
     const [showModal, setShowModal] = useState(false);
+    const [lightboxImage, setLightboxImage] = useState(null);
 
     useEffect(() => {
         const load = async () => {
@@ -530,14 +532,50 @@ const EventDetail = () => {
 
     return (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
-            {/* Banner */}
-            <div className="rounded-2xl overflow-hidden h-72 bg-gray-100 dark:bg-gray-800 mb-8">
+            {/* Banner with Click to Expand */}
+            <div 
+                className="group relative rounded-2xl overflow-hidden h-72 sm:h-80 md:h-96 bg-gray-100 dark:bg-gray-800 mb-8 cursor-pointer shadow-sm hover:shadow-xl transition-all duration-300"
+                onClick={() => setLightboxImage({ src: bannerUrl, title: event.title, alt: event.title })}
+                title="Click to view full banner"
+            >
                 <img
                     src={bannerUrl}
                     alt={event.title}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.015]"
                 />
+
+                {/* Subtle dark gradient hint on hover */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/60 backdrop-blur-md text-white text-xs sm:text-sm font-semibold shadow-lg border border-white/20 transform translate-y-2 group-hover:translate-y-0 transition-transform">
+                        <Maximize2 className="w-4 h-4" />
+                        <span>Click to view full banner</span>
+                    </div>
+                </div>
+
+                {/* Top-right expand button */}
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setLightboxImage({ src: bannerUrl, title: event.title, alt: event.title });
+                    }}
+                    className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/50 hover:bg-black/75 text-white text-xs font-medium backdrop-blur-md transition-colors cursor-pointer"
+                >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Expand Banner</span>
+                </button>
             </div>
+
+            {/* Banner Lightbox Modal */}
+            {lightboxImage && (
+                <ImageLightbox
+                    src={lightboxImage.src}
+                    title={lightboxImage.title}
+                    alt={lightboxImage.alt}
+                    isOpen={!!lightboxImage}
+                    onClose={() => setLightboxImage(null)}
+                />
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {/* Main content */}
