@@ -91,29 +91,90 @@ export const toggleAttendance = async (registrationId, attended) => {
 };
 
 /**
- * Mark attendance by QR token. Used by the check-in scanner.
- * @param {string} qrToken - the unique qr_token value on the registration
- * @returns {Promise<object>} updated registrations row joined with event and profile
+ * Robustly extract a clean QR token string from raw scanner input.
+ * Handles plain UUIDs, JSON payloads, URLs with query params, or quoted strings.
+ * @param {string} rawInput
+ * @returns {string}
  */
-export const checkInByQrToken = async (qrToken) => {
-    // First look up the registration
+export const extractQrToken = (rawInput) => {
+    if (!rawInput) return '';
+    let token = typeof rawInput === 'string' ? rawInput.trim() : String(rawInput).trim();
+
+    // Strip wrapping quotes
+    if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+        token = token.slice(1, -1).trim();
+    }
+
+    // JSON payload support e.g. {"token":"...", "qr_token":"..."}
+    if (token.startsWith('{') && token.endsWith('}')) {
+        try {
+            const parsed = JSON.parse(token);
+            token = parsed.qr_token || parsed.token || parsed.qrToken || parsed.id || token;
+        } catch {
+            // retain current token
+        }
+    }
+
+    // URL parameter support e.g. https://.../checkin?token=...
+    if (token.includes('http://') || token.includes('https://') || token.includes('?')) {
+        try {
+            const url = new URL(token, window.location.origin);
+            const param = url.searchParams.get('token') || url.searchParams.get('qr_token') || url.searchParams.get('qrToken');
+            if (param) token = param;
+            else {
+                const parts = url.pathname.split('/').filter(Boolean);
+                if (parts.length > 0) {
+                    const last = parts[parts.length - 1];
+                    if (/^[0-9a-fA-F-]{36}$/.test(last)) token = last;
+                }
+            }
+        } catch {
+            // retain current token
+        }
+    }
+
+    return token.trim();
+};
+
+/**
+ * Mark attendance by QR token. Used by the check-in scanner.
+ * Supports raw token strings, URL formats, and JSON-wrapped tokens.
+ * @param {string} rawQrToken - raw scanned text or ticket token
+ * @returns {Promise<object>} updated registrations row joined with event and profile, with alreadyCheckedIn flag
+ */
+export const checkInByQrToken = async (rawQrToken) => {
+    const qrToken = extractQrToken(rawQrToken);
+    if (!qrToken) {
+        throw new Error('No QR code token provided');
+    }
+
+    // Look up the registration
     const { data: reg, error: findError } = await supabase
         .from('registrations')
-        .select('*, profiles(name, email, roll_no), events(title, date, venue)')
+        .select('*, profiles(id, name, email, roll_no, department, year), events(id, title, date, venue)')
         .eq('qr_token', qrToken)
-        .single();
+        .maybeSingle();
+
     if (findError) throw findError;
+    if (!reg) {
+        throw new Error('Invalid QR code — no registration found for this ticket.');
+    }
 
-    if (reg.attended) return reg; // already checked in
+    // If already checked in, return with flag
+    if (reg.attended) {
+        return { ...reg, alreadyCheckedIn: true };
+    }
 
+    // Mark attendance
     const { data, error } = await supabase
         .from('registrations')
         .update({ attended: true })
         .eq('id', reg.id)
-        .select('*, profiles(name, email, roll_no), events(title, date, venue)')
+        .select('*, profiles(id, name, email, roll_no, department, year), events(id, title, date, venue)')
         .single();
+
     if (error) throw error;
-    return data;
+    return { ...data, alreadyCheckedIn: false };
 };
 
 /**

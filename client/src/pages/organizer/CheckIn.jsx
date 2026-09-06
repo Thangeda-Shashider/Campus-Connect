@@ -25,8 +25,13 @@ const CheckIn = () => {
             const profile = reg.profiles || reg.profile || reg.user;
             const name = profile?.name || 'Student';
             const dept = profile?.department || profile?.roll_no || '';
-            setResult({ success: true, name, dept });
-            toast.success(`✓ Checked in: ${name}`);
+            const already = Boolean(reg.alreadyCheckedIn);
+            setResult({ success: true, already, name, dept });
+            if (already) {
+                toast(`ℹ️ ${name} was already checked in earlier`, { icon: '⚠️' });
+            } else {
+                toast.success(`✓ Checked in: ${name}`);
+            }
         } catch (err) {
             const errorMsg = err.message || 'Invalid or expired QR code';
             setResult({ success: false, error: errorMsg });
@@ -44,7 +49,7 @@ const CheckIn = () => {
     return (
         <div className="max-w-lg mx-auto px-4 sm:px-6 py-10">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">QR Check-In</h1>
-            <p className="text-gray-500 dark:text-gray-400 mb-8">Scan a student's QR code to mark their attendance</p>
+            <p className="text-gray-500 dark:text-gray-400 mb-8">Scan a student's QR code or enter ticket code to mark attendance</p>
 
             {/* Scanner */}
             <div className="mb-6">
@@ -57,17 +62,21 @@ const CheckIn = () => {
                     className={cn(
                         'flex flex-col items-center gap-3 p-6 rounded-2xl border text-center',
                         result.success
-                            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                            ? result.already
+                                ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                                : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
                             : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
                     )}
                 >
                     {result.success ? (
                         <>
-                            <CheckCircle className="w-12 h-12 text-green-500" />
+                            <CheckCircle className={cn('w-12 h-12', result.already ? 'text-amber-500' : 'text-green-500')} />
                             <div>
-                                <p className="font-bold text-lg text-green-800 dark:text-green-300">{result.name}</p>
-                                {result.dept && <p className="text-sm text-green-600 dark:text-green-400">{result.dept}</p>}
-                                <p className="text-sm text-green-700 dark:text-green-400 mt-1">Attendance marked ✓</p>
+                                <p className="font-bold text-lg text-gray-900 dark:text-white">{result.name}</p>
+                                {result.dept && <p className="text-sm text-gray-500 dark:text-gray-400">{result.dept}</p>}
+                                <p className={cn('text-sm font-medium mt-1', result.already ? 'text-amber-700 dark:text-amber-400' : 'text-green-700 dark:text-green-400')}>
+                                    {result.already ? 'Already checked in previously ⚠️' : 'Attendance marked ✓'}
+                                </p>
                             </div>
                         </>
                     ) : (
