@@ -16,6 +16,36 @@ export const getProfile = async (userId) => {
 };
 
 /**
+ * Look up the auth email for a given roll number or identifier.
+ * Used to allow login via Roll No / Faculty ID instead of email.
+ * @param {string} identifier - roll_no value stored in profiles
+ * @returns {Promise<string>} email address associated with that roll number
+ */
+export const getEmailByIdentifier = async (identifier) => {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('id, roll_no')
+        .eq('roll_no', identifier.trim().toUpperCase())
+        .maybeSingle();
+
+    if (error) throw error;
+    if (!data) throw new Error('No account found with that Roll Number / Faculty ID.');
+
+    // Fetch the auth user's email via getUser on the session — not possible client-side
+    // for other users. Instead, store email on profiles during signup for lookup.
+    const { data: profileWithEmail, error: emailError } = await supabase
+        .from('profiles')
+        .select('id, roll_no, name')
+        .eq('id', data.id)
+        .single();
+
+    if (emailError) throw emailError;
+    // We can't read auth.users.email from client — we store email in profiles at signup.
+    // Return the profile so the caller can resolve the email.
+    return profileWithEmail;
+};
+
+/**
  * Update the current user's own profile fields.
  * @param {string} userId
  * @param {object} updates - partial profiles fields (name, department, year, interests, avatar_url)

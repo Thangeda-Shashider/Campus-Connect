@@ -53,9 +53,10 @@ const useAuthStore = create((set) => ({
 
     /**
      * Sign up with email/password. Profile row is created by the DB trigger.
+     * Role is always 'student' by default — admin promotes via Manage Users.
      * @returns {{ user: object|null, needsEmailConfirmation: boolean }}
      */
-    signup: async ({ email, password, name, rollNo, role, department, year }) => {
+    signup: async ({ email, password, name, rollNo, department, year }) => {
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
@@ -63,7 +64,8 @@ const useAuthStore = create((set) => ({
                 data: {
                     name,
                     roll_no: rollNo,
-                    role,
+                    role: 'student',
+                    email,
                     department: department ?? '',
                     year: year != null && year !== '' ? String(year) : '',
                 },
@@ -76,6 +78,9 @@ const useAuthStore = create((set) => ({
             return { user: null, needsEmailConfirmation: true };
         }
 
+        // Store email on profile row for roll-no login lookup
+        await supabase.from('profiles').update({ email }).eq('id', data.user.id);
+
         const profile = await fetchProfile(data.user.id);
         const user = buildUser(profile, data.user.email);
         set({ user, isAuthenticated: true });
@@ -83,10 +88,28 @@ const useAuthStore = create((set) => ({
     },
 
     /**
-     * Sign in with email/password.
+     * Sign in with email or roll number / faculty ID.
+     * If identifier is not an email, look up the email from profiles.roll_no first.
+     * @param {{ identifier: string, password: string }} credentials
      * @returns {object} profiles row plus email
      */
-    login: async ({ email, password }) => {
+    login: async ({ identifier, password }) => {
+        let email = identifier.trim();
+
+        // If the identifier is not an email, resolve it via roll_no in profiles
+        const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        if (!isEmail) {
+            const { data: profile, error: lookupError } = await supabase
+                .from('profiles')
+                .select('email')
+                .eq('roll_no', email.toUpperCase())
+                .maybeSingle();
+
+            if (lookupError) throw lookupError;
+            if (!profile?.email) throw new Error('No account found for that Roll No / Faculty ID.');
+            email = profile.email;
+        }
+
         const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password,

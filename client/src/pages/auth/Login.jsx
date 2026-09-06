@@ -9,7 +9,7 @@ import { cn } from '../../lib/utils.js';
 import { useState } from 'react';
 
 const schema = z.object({
-    email: z.string().email('Valid email is required'),
+    identifier: z.string().min(1, 'Roll Number / Email is required'),
     password: z.string().min(1, 'Password is required'),
 });
 
@@ -63,14 +63,22 @@ const Login = () => {
                 <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 p-8">
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Roll Number / Faculty ID / Email
+                            </label>
                             <input
-                                type="email"
-                                {...register('email')}
-                                className={inp(errors.email)}
-                                autoComplete="email"
+                                {...register('identifier')}
+                                className={inp(errors.identifier)}
+                                placeholder="e.g. 23951A059Q or you@iare.ac.in"
+                                autoComplete="username"
+                                autoCapitalize="characters"
                             />
-                            {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email.message}</p>}
+                            {errors.identifier && (
+                                <p className="mt-1 text-xs text-red-500">{errors.identifier.message}</p>
+                            )}
+                            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                You can use your Roll No, Faculty ID, or registered email address.
+                            </p>
                         </div>
 
                         <div>
