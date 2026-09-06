@@ -73,8 +73,19 @@ const QRScanModal = ({ onClose, onScan, currentEventId }) => {
             }
             const profile = reg.profiles || reg.profile || reg.user;
             const regId = reg.id || reg._id;
-            setResult({ success: true, name: profile?.name, dept: profile?.department, registrationId: regId });
-            toast.success(`✓ Checked in: ${profile?.name}`);
+            const already = Boolean(reg.alreadyCheckedIn);
+            setResult({ 
+                success: true, 
+                already, 
+                name: profile?.name, 
+                dept: profile?.department || profile?.roll_no, 
+                registrationId: regId 
+            });
+            if (already) {
+                toast(`ℹ️ ${profile?.name} was already checked in`, { icon: '⚠️' });
+            } else {
+                toast.success(`✓ Checked in: ${profile?.name}`);
+            }
             onScan(regId);
         } catch (err) {
             setResult({ success: false, error: err.message || 'Invalid QR code' });
@@ -100,27 +111,29 @@ const QRScanModal = ({ onClose, onScan, currentEventId }) => {
                     {!result ? (
                         <>
                             <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-4">
-                                Point camera at student's QR code to mark attendance
+                                Point camera at student's QR code or enter ticket code
                             </p>
                             <QRScanner onScan={handleScan} disabled={processing} />
                             {processing && (
                                 <div className="flex items-center justify-center gap-2 mt-4 text-indigo-600 dark:text-indigo-400">
                                     <Loader2 className="w-4 h-4 animate-spin" />
-                                    <span className="text-sm">Processing...</span>
+                                    <span className="text-sm">Processing ticket...</span>
                                 </div>
                             )}
                         </>
                     ) : result.success ? (
                         <div className="text-center py-6">
-                            <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-4">
-                                <CheckCircle2 className="w-9 h-9 text-green-600 dark:text-green-400" />
+                            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${result.already ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-green-100 dark:bg-green-900/30'}`}>
+                                <CheckCircle2 className={`w-9 h-9 ${result.already ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`} />
                             </div>
                             <h3 className="text-xl font-bold text-gray-900 dark:text-white">{result.name}</h3>
                             {result.dept && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{result.dept}</p>}
-                            <p className="text-sm text-green-600 dark:text-green-400 font-medium mt-2">Attendance marked successfully ✓</p>
+                            <p className={`text-sm font-medium mt-2 ${result.already ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                                {result.already ? 'Already checked in earlier ⚠️' : 'Attendance marked successfully ✓'}
+                            </p>
                             <div className="flex gap-3 mt-6">
                                 <button onClick={() => setResult(null)}
-                                    className="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors">
+                                    className="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors cursor-pointer">
                                     Scan Next
                                 </button>
                                 <button onClick={onClose}
