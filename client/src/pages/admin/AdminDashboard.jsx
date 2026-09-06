@@ -1,17 +1,23 @@
 import { useEffect, useState } from 'react';
-import { Users, CalendarDays, ClipboardList, TrendingUp, Plus, ShieldCheck, Award } from 'lucide-react';
+import { Users, CalendarDays, ClipboardList, TrendingUp, Plus, Award } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getPlatformStats } from '../../lib/api/admin.js';
 
-const StatCard = ({ icon, label, value, color }) => (
-    <div className="rounded-2xl p-6 flex items-center gap-4 shadow-sm transition-all hover:scale-[1.02]"
-        style={{ border: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(255,255,255,0.04)' }}>
+const StatCard = ({ icon, label, value, color, onClick }) => (
+    <div
+        onClick={onClick}
+        className={`rounded-2xl p-6 flex items-center gap-4 shadow-sm transition-all hover:scale-[1.02] ${onClick ? 'cursor-pointer hover:ring-2 hover:ring-indigo-500/40' : ''}`}
+        style={{ border: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(255,255,255,0.04)' }}
+    >
         <div className={`p-3 rounded-xl ${color}`}>
             {icon}
         </div>
         <div>
             <p className="text-sm text-gray-400">{label}</p>
             <p className="text-2xl font-bold text-white">{value ?? '–'}</p>
+            {onClick && (
+                <p className="text-xs text-indigo-400 mt-0.5 opacity-70">Click to manage →</p>
+            )}
         </div>
     </div>
 );
@@ -62,7 +68,7 @@ const AdminDashboard = () => {
                 </button>
             </div>
 
-            {/* Stats grid */}
+            {/* Stats grid — Total Users and Total Events are clickable */}
             {loading ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {Array.from({ length: 4 }).map((_, i) => (
@@ -71,10 +77,32 @@ const AdminDashboard = () => {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <StatCard icon={<Users className="w-6 h-6 text-indigo-400" />} label="Total Users" value={stats?.totalUsers} color="bg-indigo-500/20" />
-                    <StatCard icon={<CalendarDays className="w-6 h-6 text-purple-400" />} label="Total Events" value={stats?.totalEvents} color="bg-purple-500/20" />
-                    <StatCard icon={<ClipboardList className="w-6 h-6 text-blue-400" />} label="Registrations This Month" value={stats?.registrationsThisMonth} color="bg-blue-500/20" />
-                    <StatCard icon={<TrendingUp className="w-6 h-6 text-green-400" />} label="Attendance Rate" value={stats ? `${stats.attendanceRate}%` : null} color="bg-green-500/20" />
+                    <StatCard
+                        icon={<Users className="w-6 h-6 text-indigo-400" />}
+                        label="Total Users"
+                        value={stats?.totalUsers}
+                        color="bg-indigo-500/20"
+                        onClick={() => navigate('/admin/users')}
+                    />
+                    <StatCard
+                        icon={<CalendarDays className="w-6 h-6 text-purple-400" />}
+                        label="Total Events"
+                        value={stats?.totalEvents}
+                        color="bg-purple-500/20"
+                        onClick={() => navigate('/admin/events')}
+                    />
+                    <StatCard
+                        icon={<ClipboardList className="w-6 h-6 text-blue-400" />}
+                        label="Registrations This Month"
+                        value={stats?.registrationsThisMonth}
+                        color="bg-blue-500/20"
+                    />
+                    <StatCard
+                        icon={<TrendingUp className="w-6 h-6 text-green-400" />}
+                        label="Attendance Rate"
+                        value={stats ? `${stats.attendanceRate}%` : null}
+                        color="bg-green-500/20"
+                    />
                 </div>
             )}
 
