@@ -15,9 +15,6 @@ const schema = z
         email: z.string().email('Enter a valid email address'),
         password: z.string().min(6, 'Password must be at least 6 characters'),
         confirmPassword: z.string().min(1, 'Please confirm your password'),
-        role: z.enum(['student', 'organizer'], {
-            errorMap: () => ({ message: 'Please select a role' }),
-        }),
     })
     .refine((data) => data.password === data.confirmPassword, {
         message: 'Passwords do not match',
@@ -33,7 +30,7 @@ const Register = () => {
         register,
         handleSubmit,
         formState: { errors },
-    } = useForm({ resolver: zodResolver(schema), defaultValues: { role: 'student' } });
+    } = useForm({ resolver: zodResolver(schema) });
 
     const onSubmit = async (data) => {
         setIsLoading(true);
@@ -46,7 +43,7 @@ const Register = () => {
                 return;
             }
             toast.success('Account created! Welcome to CampusConnect 🎉');
-            navigate(user.role === 'organizer' ? '/organizer/manage' : '/dashboard');
+            navigate('/dashboard');
         } catch (err) {
             toast.error(err.message || 'Registration failed');
         } finally {
@@ -77,9 +74,9 @@ const Register = () => {
                         {/* Roll Number */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Roll Number
+                                Roll Number / Faculty ID
                             </label>
-                            <input {...register('rollNo')} className={inp(errors.rollNo)} autoComplete="off" />
+                            <input {...register('rollNo')} className={inp(errors.rollNo)} autoComplete="off" placeholder="e.g. 23951A059Q" />
                             {errors.rollNo && <p className="mt-1 text-xs text-red-500">{errors.rollNo.message}</p>}
                         </div>
 
@@ -95,9 +92,9 @@ const Register = () => {
                         {/* Email */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Email Address
+                                College Email Address
                             </label>
-                            <input type="email" {...register('email')} className={inp(errors.email)} autoComplete="email" />
+                            <input type="email" {...register('email')} className={inp(errors.email)} autoComplete="email" placeholder="you@iare.ac.in" />
                             {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email.message}</p>}
                         </div>
 
@@ -131,26 +128,12 @@ const Register = () => {
                             </div>
                         </div>
 
-                        {/* Role */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Role
-                            </label>
-                            <div className="grid grid-cols-2 gap-3">
-                                {[
-                                    { value: 'student', label: '🎓 Student' },
-                                    { value: 'organizer', label: '🎤 Organizer' },
-                                ].map(({ value, label }) => (
-                                    <label key={value} className="cursor-pointer">
-                                        <input type="radio" value={value} {...register('role')} className="sr-only peer" />
-                                        <div className="border-2 rounded-xl px-4 py-3 text-center text-sm font-medium transition-all peer-checked:border-indigo-500 peer-checked:bg-indigo-50 peer-checked:text-indigo-700 dark:peer-checked:bg-indigo-900/30 dark:peer-checked:text-indigo-300 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600">
-                                            {label}
-                                        </div>
-                                    </label>
-                                ))}
-                            </div>
-                            {errors.role && <p className="mt-1 text-xs text-red-500">{errors.role.message}</p>}
-                        </div>
+                        {/* Role note */}
+                        <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1.5">
+                            <span>🎓</span>
+                            All accounts are created as <strong className="text-gray-600 dark:text-gray-300">Student</strong>.
+                            Organizer / Admin roles are assigned by the administrator.
+                        </p>
 
                         {/* Submit */}
                         <button
@@ -161,7 +144,6 @@ const Register = () => {
                             {isLoading ? 'Creating account…' : 'Create Account'}
                         </button>
                     </form>
-
 
                     <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
                         Already have an account?{' '}
