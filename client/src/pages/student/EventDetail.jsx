@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
     Calendar, MapPin, Users, Tag, User, X, CreditCard, Award,
     AlertCircle, CheckCircle2, Upload, Image, Loader2, ShieldCheck,
-    XCircle, Clock,
+    XCircle, Clock, Lock,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getEventById, getEventRegistrationCount } from '../../lib/api/events.js';
@@ -12,6 +12,7 @@ import {
     getMyRegistration,
     uploadPaymentScreenshot,
 } from '../../lib/api/registrations.js';
+import { updateProfile } from '../../lib/api/auth.js';
 import useAuth from '../../hooks/useAuth.js';
 import QRDisplay from '../../components/QRDisplay.jsx';
 import { formatDateTime, formatRelative } from '../../utils/formatDate.js';
@@ -48,12 +49,12 @@ const PaymentBadge = ({ status }) => {
 const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
     // Step 1 = fill details form, Step 2 = pay & upload screenshot (paid events only)
     const [step, setStep] = useState(1);
-    const [registrationId, setRegistrationId] = useState(null);
+    const { updateUser } = useAuth();
 
     const [form, setForm] = useState({
         rollNumber: user?.roll_no ?? '',
         collegeEmail: user?.email ?? '',
-        phone: '',
+        phone: user?.phone ?? '',
     });
     const [customForm, setCustomForm] = useState({});
     const [submitting, setSubmitting] = useState(false);
@@ -109,6 +110,17 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
             const reg = await registerForEvent({ eventId, formResponses });
             const regId = reg.id || reg._id;
             setRegistrationId(regId);
+
+            // Auto-sync phone back to profile if user did not have a phone set
+            if (user?.id && !user?.phone && form.phone.trim()) {
+                try {
+                    await updateProfile(user.id, { phone: form.phone.trim() });
+                    if (updateUser) updateUser({ phone: form.phone.trim() });
+                } catch (syncErr) {
+                    console.error('Failed to sync phone to profile:', syncErr);
+                }
+            }
+
             if (isPaymentRequired) {
                 setStep(2); // Move to payment step
             } else {
@@ -228,20 +240,59 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
                                 </div>
                             )}
 
-                            {/* Default fields */}
-                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Your Details</p>
+                            {/* Profile Pre-filled Details */}
+                            <div className="bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 rounded-xl p-3.5 space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-semibold text-indigo-900 dark:text-indigo-300 uppercase tracking-wide flex items-center gap-1.5">
+                                        <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                                        Profile Details
+                                    </span>
+                                    <span className="text-[11px] font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/60 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                        <Lock className="w-2.5 h-2.5" /> Auto-filled from Profile
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                    <div className="p-2.5 rounded-lg bg-white dark:bg-gray-900 border border-indigo-100/60 dark:border-gray-800">
+                                        <span className="text-gray-500 dark:text-gray-400 block text-[11px]">Roll No / Student ID</span>
+                                        <span className="font-semibold text-gray-900 dark:text-white font-mono">{form.rollNumber || 'Not set in profile'}</span>
+                                    </div>
+                                    <div className="p-2.5 rounded-lg bg-white dark:bg-gray-900 border border-indigo-100/60 dark:border-gray-800">
+                                        <span className="text-gray-500 dark:text-gray-400 block text-[11px]">College Email</span>
+                                        <span className="font-semibold text-gray-900 dark:text-white truncate block">{form.collegeEmail || 'Not set in profile'}</span>
+                                    </div>
+                                </div>
+                            </div>
 
-                            <FormField label="Roll Number" required error={errors.rollNumber}>
-                                <input type="text" className={inputClass(errors.rollNumber)} placeholder="e.g. 21CS001"
-                                    value={form.rollNumber} onChange={(e) => setForm((f) => ({ ...f, rollNumber: e.target.value }))} />
-                            </FormField>
-                            <FormField label="College Email" required error={errors.collegeEmail}>
-                                <input type="email" className={inputClass(errors.collegeEmail)} placeholder="yourname@college.edu"
-                                    value={form.collegeEmail} onChange={(e) => setForm((f) => ({ ...f, collegeEmail: e.target.value }))} />
-                            </FormField>
+                            {/* Fallback inputs if rollNumber or email is missing on profile */}
+                            {!form.rollNumber && (
+                                <FormField label="Roll Number" required error={errors.rollNumber}>
+                                    <input type="text" className={inputClass(errors.rollNumber)} placeholder="e.g. 21CS001"
+                                        value={form.rollNumber} onChange={(e) => setForm((f) => ({ ...f, rollNumber: e.target.value }))} />
+                                </FormField>
+                            )}
+                            {!form.collegeEmail && (
+                                <FormField label="College Email" required error={errors.collegeEmail}>
+                                    <input type="email" className={inputClass(errors.collegeEmail)} placeholder="yourname@college.edu"
+                                        value={form.collegeEmail} onChange={(e) => setForm((f) => ({ ...f, collegeEmail: e.target.value }))} />
+                                </FormField>
+                            )}
+
+                            {/* Phone Number Field */}
                             <FormField label="Phone Number" required error={errors.phone}>
-                                <input type="tel" className={inputClass(errors.phone)} placeholder="10-digit mobile number"
-                                    value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+                                <div className="relative">
+                                    <input 
+                                        type="tel" 
+                                        className={inputClass(errors.phone)} 
+                                        placeholder="10-digit mobile number"
+                                        value={form.phone} 
+                                        onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} 
+                                    />
+                                    {user?.phone && form.phone === user.phone && (
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded">
+                                            Auto-filled
+                                        </span>
+                                    )}
+                                </div>
                             </FormField>
 
                             {/* Custom fields */}
@@ -526,17 +577,22 @@ const EventDetail = () => {
                                     Registration requires
                                 </p>
                             </div>
-                            {['Roll Number', 'College Email', 'Phone Number', ...(formFields.map(f => f.label) ?? [])].map((label, i, arr) => (
-                                <div key={label} className={cn('flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-900', i < arr.length - 1 ? 'border-b dark:border-gray-800' : '')}>
-                                    <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
-                                    <span className={cn('text-xs px-2 py-0.5 rounded-full',
-                                        (i < 3 || formFields[i - 3]?.required)
-                                            ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                                            : 'bg-gray-100 dark:bg-gray-800 text-gray-500')}>
-                                        {(i < 3 || formFields[i - 3]?.required) ? 'Required' : 'Optional'}
-                                    </span>
-                                </div>
-                            ))}
+                            {['Roll Number', 'College Email', 'Phone Number', ...(formFields.map(f => f.label) ?? [])].map((label, i, arr) => {
+                                const isPrefilled = (i === 0 && user?.roll_no) || (i === 1 && user?.email) || (i === 2 && user?.phone);
+                                return (
+                                    <div key={label} className={cn('flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-900', i < arr.length - 1 ? 'border-b dark:border-gray-800' : '')}>
+                                        <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
+                                        <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium',
+                                            isPrefilled
+                                                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                                                : (i < 3 || formFields[i - 3]?.required)
+                                                    ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500')}>
+                                            {isPrefilled ? 'Auto-filled ✓' : (i < 3 || formFields[i - 3]?.required) ? 'Required' : 'Optional'}
+                                        </span>
+                                    </div>
+                                );
+                            })}
                             {isPaid && (
                                 <div className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-900 border-t dark:border-gray-800">
                                     <span className="text-sm text-gray-700 dark:text-gray-300">Payment Screenshot</span>
