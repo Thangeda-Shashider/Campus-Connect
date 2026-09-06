@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import useAuth from '../hooks/useAuth.js';
 import toast from 'react-hot-toast';
 import { cn } from '../lib/utils.js';
+import ProfilePopover from './ProfilePopover.jsx';
 
 const THEME_KEY = 'campusconnect-theme';
 
@@ -103,19 +104,10 @@ const Navbar = () => {
 
                         {isAuthenticated ? (
                             <div className="hidden md:flex items-center gap-2">
-                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800">
-                                    <div className="w-6 h-6 rounded-full bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center">
-                                        <span className="text-xs font-bold text-white">
-                                            {user?.name?.[0]?.toUpperCase()}
-                                        </span>
-                                    </div>
-                                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200 max-w-[100px] truncate">
-                                        {user?.name}
-                                    </span>
-                                </div>
+                                <ProfilePopover onLogout={handleLogout} />
                                 <button
                                     onClick={handleLogout}
-                                    className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 transition-colors"
+                                    className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 transition-colors cursor-pointer"
                                 >
                                     <LogOut className="w-3.5 h-3.5" />
                                     Logout
@@ -167,11 +159,12 @@ const Navbar = () => {
                             </Link>
                         ))}
 
-                        <div className="pt-2 mt-1 border-t border-gray-200 dark:border-gray-800 flex flex-col gap-1">
+                        <div className="pt-2 mt-1 border-t border-gray-200 dark:border-gray-800 flex flex-col gap-2">
                             {isAuthenticated ? (
                                 <>
-                                    <div className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
-                                        Signed in as <strong className="text-gray-900 dark:text-white">{user?.name}</strong>
+                                    <div className="px-3 py-1 flex items-center justify-between">
+                                        <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">My Account</span>
+                                        <ProfilePopover onLogout={handleLogout} />
                                     </div>
                                     <button
                                         onClick={() => { setMenuOpen(false); handleLogout(); }}

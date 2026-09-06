@@ -100,6 +100,16 @@ const useAuthStore = create((set) => ({
     },
 
     /**
+     * Update local user state immediately after a profile edit.
+     * @param {object} updatedFields
+     */
+    updateUser: (updatedFields) => {
+        set((state) => ({
+            user: state.user ? { ...state.user, ...updatedFields } : null,
+        }));
+    },
+
+    /**
      * Sign out and clear local auth state.
      */
     logout: async () => {
