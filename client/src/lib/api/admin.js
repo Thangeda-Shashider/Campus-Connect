@@ -59,7 +59,11 @@ export const adminUpdateUser = async (userId, updates) => {
 };
 
 /**
- * Delete a user profile. Admin only via RLS.
+ * Delete a user — removes the profile row.
+ * Note: full auth.users deletion requires the Supabase service_role key
+ * or an Edge Function. This removes the profile, which cascades to
+ * registrations and achievements. The auth.users row becomes orphaned
+ * but the user cannot log in (profile is gone → app redirects away).
  * @param {string} userId
  * @returns {Promise<void>}
  */

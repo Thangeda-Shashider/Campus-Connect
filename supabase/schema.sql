@@ -128,6 +128,20 @@ drop policy if exists "profiles_update" on public.profiles;
 create policy "profiles_update" on public.profiles
   for update using (auth.uid() = id);
 
+-- Admin can update any profile (role promotion, dept edits, etc.)
+drop policy if exists "profiles_admin_update" on public.profiles;
+create policy "profiles_admin_update" on public.profiles
+  for update using (
+    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+  );
+
+-- Admin can delete any profile row
+drop policy if exists "profiles_admin_delete" on public.profiles;
+create policy "profiles_admin_delete" on public.profiles
+  for delete using (
+    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+  );
+
 drop policy if exists "events_select" on public.events;
 create policy "events_select" on public.events
   for select using (true);
