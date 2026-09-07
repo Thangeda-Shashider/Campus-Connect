@@ -68,7 +68,8 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
     const [uploading, setUploading] = useState(false);
     const [dragging, setDragging] = useState(false);
 
-    const formFields = event.registration_form_fields ?? event.registrationFormFields ?? [];
+    const rawFormFields = event.registration_form_fields ?? event.registrationFormFields;
+    const formFields = Array.isArray(rawFormFields) ? rawFormFields : [];
     const isPaymentRequired = event.payment_required ?? event.paymentRequired;
     const paymentAmount = event.payment_amount ?? event.paymentAmount;
     const paymentQrUrl = event.payment_qr_url || event.paymentQrUrl;
@@ -76,7 +77,7 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
 
     // Check if organizer explicitly requires phone number via form fields
     const organizerRequiresPhone = formFields.some(
-        (f) => f.label?.toLowerCase().includes('phone') || f.label?.toLowerCase().includes('mobile')
+        (f) => f?.label?.toLowerCase().includes('phone') || f?.label?.toLowerCase().includes('mobile')
     );
 
     const validate = () => {
@@ -587,7 +588,11 @@ const EventDetail = () => {
     const hasCert = event.has_certificate ?? event.hasCertificate;
     const isPaid = event.payment_required ?? event.paymentRequired;
     const payAmount = event.payment_amount ?? event.paymentAmount;
-    const formFields = event.registration_form_fields ?? event.registrationFormFields ?? [];
+    const rawFormFields = event.registration_form_fields ?? event.registrationFormFields;
+    const formFields = Array.isArray(rawFormFields) ? rawFormFields : [];
+    const organizerRequiresPhone = formFields.some(
+        (f) => f?.label?.toLowerCase().includes('phone') || f?.label?.toLowerCase().includes('mobile')
+    );
     const organizerName = event.profiles?.name || event.organizer?.name || 'Organizer';
     const regPaymentStatus = myRegistration?.payment_status || myRegistration?.paymentStatus;
     const regQrToken = myRegistration?.qr_token || myRegistration?.qrToken;

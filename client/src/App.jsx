@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import useAuth from './hooks/useAuth.js';
 import Navbar from './components/Navbar.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 
 // Auth pages
 import Login from './pages/auth/Login.jsx';
@@ -39,7 +40,8 @@ const AppRoutes = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <Navbar />
-      <Routes>
+      <ErrorBoundary>
+        <Routes>
         {/* Public */}
         <Route path="/" element={<Navigate to="/events" replace />} />
         <Route path="/login" element={<Login />} />
@@ -162,6 +164,7 @@ const AppRoutes = () => {
           }
         />
       </Routes>
+      </ErrorBoundary>
     </div>
   );
 };
