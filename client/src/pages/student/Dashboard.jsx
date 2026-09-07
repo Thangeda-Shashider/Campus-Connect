@@ -277,7 +277,7 @@ const RegistrationCard = ({ reg, isPast, onShowQR }) => {
                         <DetailItem label="Event Date & Time" value={formatDateTime(event.date)} />
                         <DetailItem label="Venue" value={event.venue} />
                         <DetailItem label="Category" value={event.category} />
-                        <DetailItem label="Registered On" value={formatDate(reg.registeredAt)} />
+                        <DetailItem label="Registered On" value={formatDate(reg.registered_at)} />
                     </div>
 
                     {/* Attendance */}
