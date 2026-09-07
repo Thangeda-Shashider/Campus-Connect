@@ -701,10 +701,10 @@ const EventDetail = () => {
                             {[
                                 { label: 'Roll Number', prefilled: !!user?.roll_no, required: true },
                                 { label: 'College Email', prefilled: !!user?.email, required: true },
-                                ...(organizerRequiresPhone || isPaymentRequired
+                                ...(organizerRequiresPhone || isPaid
                                     ? [{ label: 'Phone Number', prefilled: !!user?.phone, required: true }]
                                     : []),
-                                ...formFields.map((f) => ({ label: f.label, prefilled: false, required: f.required }))
+                                ...formFields.map((f) => ({ label: f?.label ?? '', prefilled: false, required: f?.required ?? false }))
                             ].map((item, i, arr) => (
                                 <div key={item.label} className={cn('flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-900', i < arr.length - 1 ? 'border-b dark:border-gray-800' : '')}>
                                     <span className="text-sm text-gray-700 dark:text-gray-300">{item.label}</span>
