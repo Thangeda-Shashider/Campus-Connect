@@ -190,7 +190,7 @@ drop policy if exists "achievements_select" on public.achievements;
 create policy "achievements_select" on public.achievements
   for select using (
     auth.uid() = student_id
-    or exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    or exists (select 1 from public.profiles where id = auth.uid() and role in ('admin', 'organizer'))
   );
 
 drop policy if exists "achievements_insert" on public.achievements;
@@ -200,7 +200,7 @@ create policy "achievements_insert" on public.achievements
 drop policy if exists "achievements_update" on public.achievements;
 create policy "achievements_update" on public.achievements
   for update using (
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    exists (select 1 from public.profiles where id = auth.uid() and role in ('admin', 'organizer'))
   );
 
 -- =============================================================================
