@@ -76,7 +76,7 @@ const Register = () => {
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Roll Number / Faculty ID
                             </label>
-                            <input {...register('rollNo')} className={inp(errors.rollNo)} autoComplete="off" placeholder="e.g. 23951A059Q" />
+                            <input {...register('rollNo')} className={inp(errors.rollNo)} autoComplete="off" />
                             {errors.rollNo && <p className="mt-1 text-xs text-red-500">{errors.rollNo.message}</p>}
                         </div>
 
@@ -94,7 +94,7 @@ const Register = () => {
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 College Email Address
                             </label>
-                            <input type="email" {...register('email')} className={inp(errors.email)} autoComplete="email" placeholder="you@iare.ac.in" />
+                            <input type="email" {...register('email')} className={inp(errors.email)} autoComplete="email" />
                             {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email.message}</p>}
                         </div>
 
@@ -128,12 +128,6 @@ const Register = () => {
                             </div>
                         </div>
 
-                        {/* Role note */}
-                        <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1.5">
-                            <span>🎓</span>
-                            All accounts are created as <strong className="text-gray-600 dark:text-gray-300">Student</strong>.
-                            Organizer / Admin roles are assigned by the administrator.
-                        </p>
 
                         {/* Submit */}
                         <button
