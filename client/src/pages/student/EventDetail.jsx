@@ -60,6 +60,7 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
     const [customForm, setCustomForm] = useState({});
     const [submitting, setSubmitting] = useState(false);
     const [errors, setErrors] = useState({});
+    const [registrationId, setRegistrationId] = useState(null); // tracks reg ID after step 1 submit
 
     // Step 2 state
     const [screenshotFile, setScreenshotFile] = useState(null);
@@ -73,13 +74,21 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
     const paymentQrUrl = event.payment_qr_url || event.paymentQrUrl;
     const hasCertificate = event.has_certificate ?? event.hasCertificate;
 
+    // Check if organizer explicitly requires phone number via form fields
+    const organizerRequiresPhone = formFields.some(
+        (f) => f.label?.toLowerCase().includes('phone') || f.label?.toLowerCase().includes('mobile')
+    );
+
     const validate = () => {
         const e = {};
         if (!form.rollNumber.trim()) e.rollNumber = 'Roll number is required';
         if (!form.collegeEmail.trim()) e.collegeEmail = 'College email is required';
         else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.collegeEmail)) e.collegeEmail = 'Enter a valid email';
-        if (!form.phone.trim()) e.phone = 'Phone number is required';
-        else if (!/^\d{10}$/.test(form.phone.replace(/\s/g, ''))) e.phone = 'Enter a valid 10-digit phone number';
+        // Phone is only required if organizer added a phone field, or if it's a paid event
+        if (organizerRequiresPhone || isPaymentRequired) {
+            if (!form.phone.trim()) e.phone = 'Phone number is required';
+            else if (!/^\d{10}$/.test(form.phone.replace(/\s/g, ''))) e.phone = 'Enter a valid 10-digit phone number';
+        }
 
         formFields.forEach((field) => {
             if (field.required) {
@@ -111,7 +120,7 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
             const formResponses = {
                 'Roll Number': form.rollNumber,
                 'College Email': form.collegeEmail,
-                'Phone Number': form.phone,
+                ...(form.phone.trim() ? { 'Phone Number': form.phone } : {}),
                 ...customForm,
             };
             const eventId = event.id || event._id;
@@ -285,23 +294,25 @@ const RegistrationModal = ({ event, user, onClose, onSuccess }) => {
                                 </FormField>
                             )}
 
-                            {/* Phone Number Field */}
-                            <FormField label="Phone Number" required error={errors.phone}>
-                                <div className="relative">
-                                    <input 
-                                        type="tel" 
-                                        className={inputClass(errors.phone)} 
-                                        placeholder="10-digit mobile number"
-                                        value={form.phone} 
-                                        onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} 
-                                    />
-                                    {user?.phone && form.phone === user.phone && (
-                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded">
-                                            Auto-filled
-                                        </span>
-                                    )}
-                                </div>
-                            </FormField>
+                            {/* Phone Number Field — shown if organizer requires it or event is paid */}
+                            {(organizerRequiresPhone || isPaymentRequired) && (
+                                <FormField label="Phone Number" required={organizerRequiresPhone || isPaymentRequired} error={errors.phone}>
+                                    <div className="relative">
+                                        <input 
+                                            type="tel" 
+                                            className={inputClass(errors.phone)} 
+                                            placeholder="10-digit mobile number"
+                                            value={form.phone} 
+                                            onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} 
+                                        />
+                                        {user?.phone && form.phone === user.phone && (
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded">
+                                                Auto-filled
+                                            </span>
+                                        )}
+                                    </div>
+                                </FormField>
+                            )}
 
                             {/* Custom fields */}
                             {formFields.length > 0 && (
@@ -682,22 +693,26 @@ const EventDetail = () => {
                                     Registration requires
                                 </p>
                             </div>
-                            {['Roll Number', 'College Email', 'Phone Number', ...(formFields.map(f => f.label) ?? [])].map((label, i, arr) => {
-                                const isPrefilled = (i === 0 && user?.roll_no) || (i === 1 && user?.email) || (i === 2 && user?.phone);
-                                return (
-                                    <div key={label} className={cn('flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-900', i < arr.length - 1 ? 'border-b dark:border-gray-800' : '')}>
-                                        <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
-                                        <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium',
-                                            isPrefilled
-                                                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                                                : (i < 3 || formFields[i - 3]?.required)
-                                                    ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500')}>
-                                            {isPrefilled ? 'Auto-filled ✓' : (i < 3 || formFields[i - 3]?.required) ? 'Required' : 'Optional'}
-                                        </span>
-                                    </div>
-                                );
-                            })}
+                            {[
+                                { label: 'Roll Number', prefilled: !!user?.roll_no, required: true },
+                                { label: 'College Email', prefilled: !!user?.email, required: true },
+                                ...(organizerRequiresPhone || isPaymentRequired
+                                    ? [{ label: 'Phone Number', prefilled: !!user?.phone, required: true }]
+                                    : []),
+                                ...formFields.map((f) => ({ label: f.label, prefilled: false, required: f.required }))
+                            ].map((item, i, arr) => (
+                                <div key={item.label} className={cn('flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-900', i < arr.length - 1 ? 'border-b dark:border-gray-800' : '')}>
+                                    <span className="text-sm text-gray-700 dark:text-gray-300">{item.label}</span>
+                                    <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium',
+                                        item.prefilled
+                                            ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                                            : item.required
+                                                ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                                                : 'bg-gray-100 dark:bg-gray-800 text-gray-500')}>
+                                        {item.prefilled ? 'Auto-filled ✓' : item.required ? 'Required' : 'Optional'}
+                                    </span>
+                                </div>
+                            ))}
                             {isPaid && (
                                 <div className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-gray-900 border-t dark:border-gray-800">
                                     <span className="text-sm text-gray-700 dark:text-gray-300">Payment Screenshot</span>
