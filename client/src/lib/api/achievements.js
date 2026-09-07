@@ -56,9 +56,11 @@ export const getMyAchievements = async (filters = {}) => {
  * @returns {Promise<object[]>}
  */
 export const getAllAchievements = async (filters = {}) => {
+    // Use !student_id hint to disambiguate — achievements has two FKs to profiles
+    // (student_id and reviewed_by), so PostgREST needs the explicit hint.
     let query = supabase
         .from('achievements')
-        .select('*, profiles(id, name, email, roll_no, department, year)')
+        .select('*, profiles!student_id(id, name, email, roll_no, department, year)')
         .order('created_at', { ascending: false });
 
     if (filters.month) query = query.eq('completion_month', filters.month);
