@@ -27,10 +27,10 @@ const ManageAchievements = () => {
     
     // Filters
     const now = new Date();
-    const [month, setMonth] = useState(now.getMonth() + 1); // Default to current month
-    const [year, setYear] = useState(now.getFullYear());
+    const [month, setMonth] = useState(''); // Show all months by default
+    const [year, setYear] = useState(''); // Show all years by default
     const [status, setStatus] = useState('');
-    const [department, setDepartment] = useState('CSE'); // Default to CSE as per requirements
+    const [department, setDepartment] = useState(''); // Show all departments by default
     
     // Action state
     const [isUpdating, setIsUpdating] = useState(null); // stores achievement ID being updated
